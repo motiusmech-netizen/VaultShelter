@@ -1856,6 +1856,18 @@ body {
   top: auto;
   bottom: calc(108px + var(--safe-b));
 }
+.tut.over-hud {
+  top: calc(6px + var(--safe-t));
+  z-index: 41;
+}
+.tut.over-hud .kuzya {
+  width: 46px;
+  height: 46px;
+}
+.tut.over-hud .bubble {
+  padding: 9px 12px;
+  font-size: 13.5px;
+}
 .tut .kuzya {
   width: 64px;
   height: 64px;

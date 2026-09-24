@@ -9,8 +9,8 @@ page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') 
 page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}\n${e.stack}`));
 await page.goto(`http://localhost:5173/?lang=${lang}`, { waitUntil: 'load' });
 await page.waitForTimeout(2000);
-const shot = async (n) => page.screenshot({ path: `/tmp/claude-0/shots/${prefix}_${n}.png` });
-const click = async (sel) => { const el = await page.$(sel); if (el) { await el.click(); return true; } return false; };
+const shot = async (n) => page.screenshot({ path: `/tmp/claude-0/-home-user-VaultShelter/fbf89165-0de1-59b2-89b9-70937b71ebd6/scratchpad/shots/${prefix}_${n}.png` });
+const click = async (sel) => { const el = await page.$(sel); if (el) { await el.click({ force: true, timeout: 3000 }).catch(() => {}); return true; } return false; };
 await shot('01_title');
 await click('.title-actions .btn');
 await page.waitForTimeout(600);

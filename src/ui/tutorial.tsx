@@ -175,10 +175,12 @@ export function Tutorial() {
     const p = app.r.cam.toScreen(world.x + world.w / 2, world.y);
     arrow = { x: p.x - 22, y: p.y - 46 };
   }
-  const low = st.panel != null && window.innerHeight > window.innerWidth ? false : false;
+  // in portrait an open sheet covers the lower screen: lift the bubble over the HUD instead
+  const overHud = st.panel != null && window.innerHeight > window.innerWidth;
+  const low = false;
   return (
     <>
-      <div class={'tut' + (low ? ' low' : '')} onPointerDown={(e) => e.stopPropagation()}>
+      <div class={'tut' + (low ? ' low' : '') + (overHud ? ' over-hud' : '')} onPointerDown={(e) => e.stopPropagation()}>
         <img class="kuzya" src={'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(KUZYA)} alt="" draggable={false} />
         <div class="bubble">
           {t(s.text as any)}
