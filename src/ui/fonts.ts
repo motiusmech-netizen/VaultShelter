@@ -1,0 +1,16 @@
+import '@fontsource/unbounded/cyrillic-700.css';
+import '@fontsource/unbounded/latin-700.css';
+import '@fontsource/unbounded/cyrillic-800.css';
+import '@fontsource/unbounded/latin-800.css';
+import '@fontsource/rubik/cyrillic-400.css';
+import '@fontsource/rubik/latin-400.css';
+import '@fontsource/rubik/cyrillic-500.css';
+import '@fontsource/rubik/latin-500.css';
+import '@fontsource/rubik/cyrillic-700.css';
+import '@fontsource/rubik/latin-700.css';
+import '@fontsource/oswald/cyrillic-500.css';
+import '@fontsource/oswald/latin-500.css';
+import '@fontsource/oswald/cyrillic-600.css';
+import '@fontsource/oswald/latin-600.css';
+import '@fontsource/oswald/cyrillic-700.css';
+import '@fontsource/oswald/latin-700.css';
