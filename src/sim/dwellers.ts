@@ -6,24 +6,59 @@ import { clamp, pick, randi, rand } from '../core/util';
 import type { Dweller, GameState, Item, Look } from './types';
 
 export const MAX_LEVEL = 50;
-export const HAIR_STYLES = 12;
-export const HAIR_COLORS = ['#2a1d16', '#5a3a22', '#8a5a2e', '#c9772f', '#e9c46a', '#b8452f', '#d9d9d9', '#1b1b1b', '#6d3f8a'];
-export const SKIN_TONES = ['#f6d5bd', '#e9b994', '#d49a6a', '#a8704a', '#7a4b2f', '#f1c6a8'];
+export const HAIR_STYLES = 24;
+/** 0-5 natural, 6 silver, 7 jet, 8 plum, 9 grey, 10 platinum, 11 teal, 12 pink, 13 blue, 14 auburn */
+export const HAIR_COLORS = [
+  '#2a1d16', '#5a3a22', '#8a5a2e', '#c9772f', '#e9c46a', '#b8452f', '#d9d9d9', '#1b1b1b',
+  '#6d3f8a', '#9a9a9a', '#f0e6c8', '#3fb3a8', '#ff86c4', '#4a78d8', '#7e2f22',
+];
+export const SKIN_TONES = ['#f6d5bd', '#e9b994', '#d49a6a', '#a8704a', '#7a4b2f', '#f1c6a8', '#c68a5c', '#5b3624', '#e3b98f'];
 
 export function xpNeeded(level: number) {
   return Math.floor(40 * Math.pow(level, 1.5));
 }
 
+function weighted(w: number[]) {
+  let r = Math.random() * w.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < w.length; i++) if ((r -= w[i]) < 0) return i;
+  return w.length - 1;
+}
+
+const MALE_HAIR = [0, 1, 2, 3, 4, 8, 10, 11, 15, 16, 17, 18, 21, 20];
+const FEMALE_HAIR = [5, 6, 7, 9, 12, 13, 14, 19, 20, 22, 23, 3, 10, 2];
+const ELDER_MALE_HAIR = [8, 8, 18, 16, 1, 0, 2];
+const ELDER_FEMALE_HAIR = [9, 9, 5, 22, 3, 23];
+
+/** A dweller's appearance "DNA": build, height, face, hair, age, marks and accessories. */
 export function randomLook(gender: 'm' | 'f'): Look {
-  const maleHair = [0, 1, 2, 3, 4, 10, 11];
-  const femaleHair = [5, 6, 7, 8, 9, 3, 11];
+  const male = gender === 'm';
+  const age = weighted([34, 36, 20, 10]);
+  const elder = age === 3;
+  const skin = randi(0, SKIN_TONES.length - 1);
+  let hairColor = weighted([16, 16, 13, 8, 9, 7, 0, 10, 2, 0, 5, 2, 2, 2, 6]);
+  if (elder) hairColor = Math.random() < 0.75 ? (Math.random() < 0.5 ? 6 : 9) : hairColor;
+  else if (age === 2 && Math.random() < 0.3) hairColor = 9;
+  const hair = pick(elder ? (male ? ELDER_MALE_HAIR : ELDER_FEMALE_HAIR) : male ? MALE_HAIR : FEMALE_HAIR);
+  const light = skin === 0 || skin === 5 || skin === 1;
+  const mark = weighted([60, light ? 16 : 5, 8, male ? 7 : 3, 8, 1.5]);
+  const acc = male ? weighted([62, 3, 6, 0, 9, 6, 0, 14]) : weighted([46, 16, 8, 9, 7, 3, 7, 4]);
   return {
-    skin: randi(0, SKIN_TONES.length - 1),
-    hair: pick(gender === 'm' ? maleHair : femaleHair),
-    hairColor: randi(0, 5) + (Math.random() < 0.08 ? 3 : 0),
-    beard: gender === 'm' && Math.random() < 0.35 ? randi(1, 4) : 0,
-    glasses: Math.random() < 0.18,
+    skin,
+    hair,
+    hairColor,
+    beard: male && age > 0 && Math.random() < 0.45 ? randi(1, 7) : male && Math.random() < 0.15 ? 4 : 0,
+    glasses: Math.random() < (elder ? 0.45 : 0.16),
     face: randi(0, 3),
+    body: weighted(male ? [18, 32, 22, 15, 13] : [26, 36, 16, 10, 12]),
+    height: weighted([10, 22, 36, 22, 10]) - 2,
+    shape: randi(0, 4),
+    nose: randi(0, 4),
+    eyes: randi(0, 4),
+    brows: male ? randi(0, 3) : weighted([55, 12, 3, 30]),
+    age,
+    mark,
+    acc,
+    lips: !male && Math.random() < 0.4 ? randi(1, 3) : 0,
   };
 }
 
@@ -204,10 +239,33 @@ export function childFrom(id: number, mom: Dweller, dad: Dweller | undefined, ti
   d.parents = dad ? [mom.id, dad.id] : [mom.id];
   // inherit look traits
   const src = Math.random() < 0.5 ? mom : dad ?? mom;
-  d.look.skin = Math.random() < 0.8 ? src.look.skin : randi(0, SKIN_TONES.length - 1);
-  d.look.hairColor = Math.random() < 0.75 ? (Math.random() < 0.5 ? mom : dad ?? mom).look.hairColor : d.look.hairColor;
-  d.look.beard = 0;
-  d.look.glasses = false;
+  const other = src === mom ? dad ?? mom : mom;
+  const L = d.look;
+  L.skin = Math.random() < 0.8 ? src.look.skin : other.look.skin;
+  const hc = (Math.random() < 0.5 ? mom : other).look.hairColor;
+  // dyed or greyed parents pass on their natural-looking colour instead
+  L.hairColor = Math.random() < 0.75 && hc <= 7 && hc !== 6 ? hc : randi(0, 5);
+  L.beard = 0;
+  L.glasses = false;
+  L.age = 0;
+  // facial features come from either parent
+  const pickTrait = (k: 'shape' | 'nose' | 'eyes' | 'brows' | 'body') => {
+    const a = src.look[k];
+    const b = other.look[k];
+    const v = Math.random() < 0.65 ? a : b;
+    if (v !== undefined && Math.random() < 0.85) L[k] = v;
+  };
+  pickTrait('shape');
+  pickTrait('nose');
+  pickTrait('eyes');
+  pickTrait('brows');
+  pickTrait('body');
+  if (L.body === 4 || L.body === 3) L.body = Math.random() < 0.5 ? 1 : L.body;
+  L.mark = Math.random() < 0.3 ? pick([1, 4]) : 0;
+  L.acc = gender === 'f' ? pick([0, 0, 2, 3, 6]) : pick([0, 0, 0, 2, 4]);
+  L.lips = 0;
+  const kidHair = (gender === 'm' ? MALE_HAIR : FEMALE_HAIR).filter((h) => h !== 8 && h !== 18);
+  if (!kidHair.includes(L.hair)) L.hair = pick(kidHair);
   return d;
 }
 

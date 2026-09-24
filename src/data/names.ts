@@ -1,3 +1,4 @@
+import type { Look } from '../sim/types';
 import type { Loc } from '../i18n';
 
 export const RU_MALE = [
@@ -51,54 +52,54 @@ export interface LegendDef {
   stats: number[];
   outfit: string;
   weapon?: string;
-  look: { skin: number; hair: number; hairColor: number; beard: number; glasses: boolean };
+  look: Omit<Look, 'face'>;
   bio: Loc;
 }
 
 export const LEGENDS: LegendDef[] = [
   {
     id: 'l_gaykin', first: { ru: 'Профессор', en: 'Professor' }, last: { ru: 'Гайкин', en: 'Nutsby' }, gender: 'm',
-    stats: [3, 7, 5, 4, 10, 4, 6], outfit: 'o_professor', look: { skin: 1, hair: 8, hairColor: 6, beard: 3, glasses: true },
+    stats: [3, 7, 5, 4, 10, 4, 6], outfit: 'o_professor', look: { skin: 1, hair: 8, hairColor: 6, beard: 3, glasses: true, body: 0, height: 1, shape: 3, nose: 3, eyes: 2, brows: 2, age: 3, mark: 0, acc: 0 },
     bio: { ru: 'Изобрёл вечный двигатель. Дважды. Оба раза потерял чертежи.', en: 'Invented a perpetual motion machine. Twice. Lost the blueprints both times.' },
   },
   {
     id: 'l_zina', first: { ru: 'Бабушка', en: 'Granny' }, last: { ru: 'Зина', en: 'Zina' }, gender: 'f',
-    stats: [5, 6, 10, 9, 5, 4, 8], outfit: 'o_granny', weapon: 'w_rollpin', look: { skin: 0, hair: 9, hairColor: 6, beard: 0, glasses: true },
+    stats: [5, 6, 10, 9, 5, 4, 8], outfit: 'o_granny', weapon: 'w_rollpin', look: { skin: 0, hair: 9, hairColor: 6, beard: 0, glasses: true, body: 4, height: -2, shape: 1, nose: 0, eyes: 0, brows: 0, age: 3, mark: 4, acc: 1, lips: 1 },
     bio: { ru: 'Варит лучший борщ в Пустоши. Скалкой владеет лучше, чем вы — чем угодно.', en: 'Cooks the best borscht in the wasteland. Wields a rolling pin better than you wield anything.' },
   },
   {
     id: 'l_shtopor', first: { ru: 'Полковник', en: 'Colonel' }, last: { ru: 'Штопор', en: 'Corkscrew' }, gender: 'm',
-    stats: [10, 8, 9, 5, 4, 6, 4], outfit: 'o_military', weapon: 'w_hunting', look: { skin: 2, hair: 1, hairColor: 5, beard: 2, glasses: false },
+    stats: [10, 8, 9, 5, 4, 6, 4], outfit: 'o_military', weapon: 'w_hunting', look: { skin: 2, hair: 1, hairColor: 5, beard: 6, glasses: false, body: 2, height: 2, shape: 2, nose: 1, eyes: 3, brows: 3, age: 2, mark: 3, acc: 0 },
     bio: { ru: 'Прошёл три войны и одну очередь в поликлинику.', en: 'Survived three wars and one hospital queue.' },
   },
   {
     id: 'l_vasya', first: { ru: 'Кибер-', en: 'Cyber' }, last: { ru: 'Вася', en: 'Vasya' }, gender: 'm',
-    stats: [4, 8, 5, 5, 9, 9, 7], outfit: 'o_engineer', weapon: 'w_laserp', look: { skin: 1, hair: 3, hairColor: 7, beard: 0, glasses: false },
+    stats: [4, 8, 5, 5, 9, 9, 7], outfit: 'o_engineer', weapon: 'w_laserp', look: { skin: 1, hair: 4, hairColor: 11, beard: 0, glasses: false, body: 0, height: 0, shape: 4, nose: 4, eyes: 4, brows: 3, age: 0, mark: 1, acc: 4 },
     bio: { ru: 'Говорит, что наполовину робот. Роботы это отрицают.', en: 'Claims to be half robot. The robots deny it.' },
   },
   {
     id: 'l_diesel', first: { ru: 'Капитан', en: 'Captain' }, last: { ru: 'Дизель', en: 'Diesel' }, gender: 'm',
-    stats: [9, 6, 10, 6, 5, 5, 5], outfit: 'o_mechanic', weapon: 'w_wrench', look: { skin: 3, hair: 0, hairColor: 0, beard: 1, glasses: false },
+    stats: [9, 6, 10, 6, 5, 5, 5], outfit: 'o_mechanic', weapon: 'w_wrench', look: { skin: 3, hair: 16, hairColor: 0, beard: 5, glasses: false, body: 3, height: 1, shape: 2, nose: 2, eyes: 3, brows: 1, age: 1, mark: 5, acc: 7 },
     bio: { ru: 'Может починить что угодно. Кроме своего характера.', en: 'Can fix anything. Except his temper.' },
   },
   {
     id: 'l_roza', first: { ru: 'Тётя', en: 'Aunt' }, last: { ru: 'Роза', en: 'Rosa' }, gender: 'f',
-    stats: [4, 6, 6, 10, 6, 5, 9], outfit: 'o_evening', look: { skin: 2, hair: 5, hairColor: 3, beard: 0, glasses: false },
+    stats: [4, 6, 6, 10, 6, 5, 9], outfit: 'o_evening', look: { skin: 2, hair: 13, hairColor: 3, beard: 0, glasses: false, body: 3, height: 0, shape: 1, nose: 0, eyes: 1, brows: 0, age: 2, mark: 2, acc: 3, lips: 2 },
     bio: { ru: 'Её улыбка поднимает настроение всему этажу.', en: 'Her smile lifts the mood of a whole floor.' },
   },
   {
     id: 'l_liza', first: { ru: 'Лиза', en: 'Liza' }, last: { ru: 'Молния', en: 'Lightning' }, gender: 'f',
-    stats: [5, 9, 6, 6, 5, 10, 7], outfit: 'o_athlete', weapon: 'w_crossbow', look: { skin: 0, hair: 6, hairColor: 4, beard: 0, glasses: false },
+    stats: [5, 9, 6, 6, 5, 10, 7], outfit: 'o_athlete', weapon: 'w_crossbow', look: { skin: 0, hair: 7, hairColor: 4, beard: 0, glasses: false, body: 2, height: 1, shape: 0, nose: 4, eyes: 1, brows: 0, age: 0, mark: 1, acc: 2 },
     bio: { ru: 'Пробежала Пустошь за выходные. Туда и обратно.', en: 'Ran across the wasteland over a weekend. And back.' },
   },
   {
     id: 'l_doc', first: { ru: 'Док', en: 'Doc' }, last: { ru: 'Пилюлькин', en: 'Pillsbury' }, gender: 'm',
-    stats: [3, 7, 7, 6, 10, 5, 6], outfit: 'o_medic', look: { skin: 4, hair: 2, hairColor: 1, beard: 4, glasses: true },
+    stats: [3, 7, 7, 6, 10, 5, 6], outfit: 'o_medic', look: { skin: 4, hair: 2, hairColor: 7, beard: 4, glasses: true, body: 1, height: -1, shape: 1, nose: 2, eyes: 0, brows: 2, age: 2, mark: 0, acc: 0 },
     bio: { ru: 'Лечит всё, кроме привычки опаздывать.', en: 'Cures everything except being late.' },
   },
   {
     id: 'l_aurora', first: { ru: 'Сестра', en: 'Sister' }, last: { ru: 'Аврора', en: 'Aurora' }, gender: 'f',
-    stats: [6, 8, 7, 8, 8, 6, 6], outfit: 'o_cosmo', weapon: 'w_plasma', look: { skin: 3, hair: 4, hairColor: 2, beard: 0, glasses: false },
+    stats: [6, 8, 7, 8, 8, 6, 6], outfit: 'o_cosmo', weapon: 'w_plasma', look: { skin: 3, hair: 22, hairColor: 10, beard: 0, glasses: false, body: 1, height: 1, shape: 4, nose: 1, eyes: 4, brows: 3, age: 1, mark: 0, acc: 1, lips: 3 },
     bio: { ru: 'Утверждает, что прилетела с орбиты. Скафандр подтверждает.', en: 'Claims she came from orbit. The spacesuit agrees.' },
   },
 ];

@@ -14,6 +14,26 @@ export interface Look {
   beard: number;
   glasses: boolean;
   face: number;
+  /** 0 slim, 1 average, 2 athletic, 3 stocky, 4 heavy */
+  body?: number;
+  /** -2..2 */
+  height?: number;
+  /** face shape: 0 oval, 1 round, 2 square, 3 long, 4 heart */
+  shape?: number;
+  /** 0 button, 1 straight, 2 wide, 3 long, 4 upturned */
+  nose?: number;
+  /** 0 round, 1 almond, 2 sleepy, 3 narrow, 4 big */
+  eyes?: number;
+  /** 0 thin arched, 1 thick straight, 2 bushy, 3 angled */
+  brows?: number;
+  /** 0 young, 1 adult, 2 middle-aged, 3 elder */
+  age?: number;
+  /** 0 none, 1 freckles, 2 mole, 3 scar, 4 rosy cheeks, 5 eyepatch */
+  mark?: number;
+  /** 0 none, 1 earrings, 2 headband, 3 flower, 4 headphones, 5 bandage, 6 bow, 7 rolled sleeves */
+  acc?: number;
+  /** 0 natural, 1..3 lipstick */
+  lips?: number;
 }
 
 export interface Dweller {

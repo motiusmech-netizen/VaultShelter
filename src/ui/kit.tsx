@@ -2,7 +2,7 @@ import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useRef } from 'preact/hooks';
 import { iconSvg } from './icons';
 import { audio } from '../audio/audio';
-import { drawCharacter, DEFAULT_POSE, drawWeapon } from '../render/dwellerArt';
+import { drawCharacter, DEFAULT_POSE, drawWeapon, dnaOf } from '../render/dwellerArt';
 import type { Dweller, Item } from '../sim/types';
 import { app } from '../app';
 import { outfitOf } from '../render/actors';
@@ -143,7 +143,7 @@ export function Modal(props: { children: ComponentChildren; hero?: ComponentChil
 /** Canvas portrait of a dweller. */
 export function Avatar({ d, big, cls }: { d: Dweller; big?: boolean; cls?: string }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const key = `${d.id}|${d.outfit}|${d.happy > 70 ? 1 : d.happy < 35 ? 2 : 0}|${d.ko}|${d.child}|${d.look.hair}|${d.look.hairColor}`;
+  const key = `${d.id}|${d.outfit}|${d.look.age ?? ''}|${d.happy > 70 ? 1 : d.happy < 35 ? 2 : 0}|${d.ko}|${d.child}|${d.look.hair}|${d.look.hairColor}`;
   useEffect(() => {
     const c = ref.current;
     if (!c) return;
@@ -155,7 +155,9 @@ export function Avatar({ d, big, cls }: { d: Dweller; big?: boolean; cls?: strin
     const ctx = c.getContext('2d')!;
     ctx.scale(dpr, dpr);
     const s = (big ? 2.9 : 1.75) * (d.child ? 1.25 : 1);
-    ctx.translate(w / 2, h + (big ? 37 : 23) * (d.child ? 0.4 : 1));
+    // keep the head framed for tall dwellers and big hairdos
+    const tall = d.child ? 0 : (dnaOf(d.look, d.gender === 'f').height ?? 0) * 1.05 * s;
+    ctx.translate(w / 2, h + (big ? 41 : 26) * (d.child ? 0.4 : 1) + tall);
     ctx.scale(s, s);
     drawCharacter(
       ctx,
