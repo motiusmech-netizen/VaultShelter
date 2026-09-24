@@ -11,7 +11,7 @@ import { drawCharacter, drawCharacterLOD, DEFAULT_POSE, setVaultLabel } from './
 import { Effects, drawHeart } from './effects';
 import { box, fillRR, glow, hazard, rgba, rrect, type Ctx } from './gfx';
 import { RoomCache, paintRoomDynamic } from './roomArt';
-import { drawVaultDoorDisc } from './roomArt1';
+import { drawVaultDoorDisc } from './vaultDoor';
 import { doorDyn, elevatorDyn } from './roomArtCore';
 import { drawBug, drawCat, drawFlames, drawMole, drawPet, drawRaider, drawRobot, drawSpikeback } from './creatures';
 import { CELL_W, FEET_Y, FLOOR_FRONT, FLOOR_H, WALL_TOP, floorY, roomW, roomX, roomY, VAULT_Y0 } from './world';

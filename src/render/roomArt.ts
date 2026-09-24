@@ -1,9 +1,10 @@
 import type { RoomType } from '../data/rooms';
 import { makeCanvas, type Ctx } from './gfx';
 import { paintAO, paintCeiling, paintFloor, paintLampLight, paintShell, paintSideWalls, paintWall, levelTrim, type FloorStyle, type WallSpec } from './roomBase';
-import * as A from './roomArt1';
-import * as Bm from './roomArt2';
 import * as C from './roomArtCore';
+import * as Md from './roomArtMed';
+import * as Tc from './roomArtTech';
+import * as Tr from './roomArtTrain';
 import { FLOOR_H } from './world';
 
 interface Style {
@@ -125,58 +126,58 @@ export function paintRoomStatic(ctx: Ctx, type: RoomType, size: number, level: n
       C.storageStatic(ctx, w, size, level, lang);
       break;
     case 'medbay':
-      A.medbayStatic(ctx, w, size, level);
+      Md.medbayStatic(ctx, w, size, level);
       break;
     case 'lab':
-      A.labStatic(ctx, w, size, level);
+      Md.labStatic(ctx, w, size, level);
       break;
     case 'office':
-      A.officeStatic(ctx, w, size, level, lang);
+      Md.officeStatic(ctx, w, size, level, lang);
       break;
     case 'radio':
-      A.radioStatic(ctx, w, size, level);
+      Md.radioStatic(ctx, w, size, level, lang);
       break;
     case 'soda':
-      A.sodaStatic(ctx, w, size, level, lang);
+      Md.sodaStatic(ctx, w, size, level, lang);
       break;
     case 'weapons':
-      Bm.weaponsStatic(ctx, w, size, level);
+      Tr.weaponsStatic(ctx, w, size, level, lang);
       break;
     case 'outfits':
-      Bm.outfitsStatic(ctx, w, size, level);
+      Tr.outfitsStatic(ctx, w, size, level, lang);
       break;
     case 'gym':
-      Bm.gymStatic(ctx, w, size, level, lang);
+      Tr.gymStatic(ctx, w, size, level, lang);
       break;
     case 'armory':
-      Bm.armoryStatic(ctx, w, size, level);
+      Tr.armoryStatic(ctx, w, size, level, lang);
       break;
     case 'fitness':
-      Bm.fitnessStatic(ctx, w, size, level);
+      Tr.fitnessStatic(ctx, w, size, level, lang);
       break;
     case 'lounge':
-      Bm.loungeStatic(ctx, w, size, level, lang);
+      Tr.loungeStatic(ctx, w, size, level, lang);
       break;
     case 'classroom':
-      Bm.classroomStatic(ctx, w, size, level, lang);
+      Tr.classroomStatic(ctx, w, size, level, lang);
       break;
     case 'athletics':
-      Bm.athleticsStatic(ctx, w, size, level);
+      Tr.athleticsStatic(ctx, w, size, level, lang);
       break;
     case 'gameroom':
-      Bm.gameroomStatic(ctx, w, size, level);
+      Tr.gameroomStatic(ctx, w, size, level, lang);
       break;
     case 'reactor':
-      Bm.reactorStatic(ctx, w, size, level);
+      Tc.reactorStatic(ctx, w, size, level, lang);
       break;
     case 'garden':
-      Bm.gardenStatic(ctx, w, size, level);
+      Tc.gardenStatic(ctx, w, size, level, lang);
       break;
     case 'purifier':
-      Bm.purifierStatic(ctx, w, size, level);
+      Tc.purifierStatic(ctx, w, size, level, lang);
       break;
     case 'dawn':
-      Bm.dawnStatic(ctx, w, size, level);
+      Tc.dawnStatic(ctx, w, size, level, lang);
       break;
   }
   paintLampLight(ctx, w, lamps, st.lamp, st.light * wallLightFactor(st.wall.base));
@@ -195,37 +196,39 @@ export function paintRoomDynamic(ctx: Ctx, type: RoomType, size: number, level: 
     case 'living':
       return C.livingDyn(ctx, w, size, level, t, active);
     case 'medbay':
-      return A.medbayDyn(ctx, w, size, level, t, active);
+      return Md.medbayDyn(ctx, w, size, level, t, active);
     case 'lab':
-      return A.labDyn(ctx, w, size, level, t, active);
+      return Md.labDyn(ctx, w, size, level, t, active);
+    case 'office':
+      return Md.officeDyn(ctx, w, size, level, t, active);
     case 'radio':
-      return A.radioDyn(ctx, w, size, level, t, active, lang);
+      return Md.radioDyn(ctx, w, size, level, t, active, lang);
     case 'soda':
-      return A.sodaDyn(ctx, w, size, level, t, active);
+      return Md.sodaDyn(ctx, w, size, level, t, active, lang);
     case 'weapons':
-      return Bm.weaponsDyn(ctx, w, size, level, t, active);
+      return Tr.weaponsDyn(ctx, w, size, level, t, active);
     case 'outfits':
-      return Bm.outfitsDyn(ctx, w, size, level, t, active);
+      return Tr.outfitsDyn(ctx, w, size, level, t, active);
     case 'gym':
-      return Bm.gymDyn(ctx, w, size, level, t, active);
+      return Tr.gymDyn(ctx, w, size, level, t, active);
     case 'armory':
-      return Bm.armoryDyn(ctx, w, size, level, t, active);
+      return Tr.armoryDyn(ctx, w, size, level, t, active);
     case 'fitness':
-      return Bm.fitnessDyn(ctx, w, size, level, t, active);
+      return Tr.fitnessDyn(ctx, w, size, level, t, active);
     case 'lounge':
-      return Bm.loungeDyn(ctx, w, size, level, t, active);
+      return Tr.loungeDyn(ctx, w, size, level, t, active, lang);
     case 'athletics':
-      return Bm.athleticsDyn(ctx, w, size, level, t, active);
+      return Tr.athleticsDyn(ctx, w, size, level, t, active);
     case 'gameroom':
-      return Bm.gameroomDyn(ctx, w, size, level, t, active);
+      return Tr.gameroomDyn(ctx, w, size, level, t, active, lang);
     case 'reactor':
-      return Bm.reactorDyn(ctx, w, size, level, t, active);
+      return Tc.reactorDyn(ctx, w, size, level, t, active);
     case 'garden':
-      return Bm.gardenDyn(ctx, w, size, level, t, active);
+      return Tc.gardenDyn(ctx, w, size, level, t, active);
     case 'purifier':
-      return Bm.purifierDyn(ctx, w, size, level, t, active);
+      return Tc.purifierDyn(ctx, w, size, level, t, active);
     case 'dawn':
-      return Bm.dawnDyn(ctx, w, size, level, t, active);
+      return Tc.dawnDyn(ctx, w, size, level, t, active);
   }
 }
 
@@ -304,4 +307,4 @@ export class RoomCache {
   }
 }
 
-export { A as art1, Bm as art2, C as artCore };
+export { C as artCore };

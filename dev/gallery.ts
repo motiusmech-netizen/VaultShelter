@@ -2,7 +2,7 @@ import '../src/ui/fonts';
 import { paintRoomStatic, paintRoomDynamic } from '../src/render/roomArt';
 import { ROOMS, type RoomType } from '../src/data/rooms';
 import { FLOOR_H, CELL_W } from '../src/render/world';
-import { drawVaultDoorDisc } from '../src/render/roomArt1';
+import { drawVaultDoorDisc } from '../src/render/vaultDoor';
 import { doorDyn, elevatorDyn } from '../src/render/roomArtCore';
 
 const params = new URLSearchParams(location.search);
