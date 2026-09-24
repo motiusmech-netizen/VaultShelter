@@ -2,6 +2,29 @@
 
 export type SfxName =
   | 'ding'
+  | 'gun_pistol'
+  | 'gun_rifle'
+  | 'gun_shotgun'
+  | 'gun_smg'
+  | 'gun_laser'
+  | 'gun_plasma'
+  | 'gun_gauss'
+  | 'gun_tesla'
+  | 'gun_flame'
+  | 'gun_rocket'
+  | 'gun_twang'
+  | 'gun_nail'
+  | 'gun_guitar'
+  | 'gun_flare'
+  | 'gun_cryo'
+  | 'swing'
+  | 'foam'
+  | 'ignite'
+  | 'impact'
+  | 'boom'
+  | 'burrow'
+  | 'splat'
+  | 'door_hit'
   | 'click'
   | 'open'
   | 'close'
@@ -220,11 +243,106 @@ class AudioEngine {
     if (!this.ctx || this.muted || this.sfxVol <= 0) return;
     const now = this.ctx.currentTime;
     const last = this.lastPlay[name] ?? -1;
-    const minGap = name === 'hit' || name === 'type' ? 0.06 : name === 'alarm' ? 1.8 : 0.04;
+    const minGap = name === 'hit' || name === 'type' || name === 'impact' ? 0.06 : name === 'alarm' ? 1.8 : name === 'foam' || name === 'gun_flame' ? 0.18 : name === 'burrow' ? 0.3 : 0.04;
     if (now - last < minGap) return;
     this.lastPlay[name] = now;
     const t = now;
     switch (name) {
+      // ---- combat
+      case 'gun_pistol':
+        this.noiseHit(0.12, { freq: 1600, q: 0.8, vol: 0.2, sweep: 400 });
+        this.tone(140, 0.09, { type: 'square', vol: 0.06, slide: 0.4, filter: 900 });
+        break;
+      case 'gun_rifle':
+        this.noiseHit(0.22, { freq: 1100, q: 0.7, vol: 0.24, sweep: 250 });
+        this.tone(90, 0.16, { type: 'sawtooth', vol: 0.08, slide: 0.4, filter: 700 });
+        this.noiseHit(0.4, { freq: 600, type: 'lowpass', vol: 0.05, t: t + 0.05 });
+        break;
+      case 'gun_shotgun':
+        this.noiseHit(0.32, { freq: 800, q: 0.5, vol: 0.3, sweep: 150 });
+        this.tone(70, 0.22, { type: 'sawtooth', vol: 0.1, slide: 0.35, filter: 500 });
+        this.noiseHit(0.08, { freq: 3000, vol: 0.05, t: t + 0.35 });
+        break;
+      case 'gun_smg':
+        for (let i = 0; i < 3; i++) this.noiseHit(0.07, { freq: 1500, q: 0.9, vol: 0.14, sweep: 500, t: t + i * 0.08 });
+        break;
+      case 'gun_laser':
+        this.tone(1800, 0.16, { type: 'square', vol: 0.05, slide: 0.25, filter: 3500 });
+        this.tone(900, 0.14, { type: 'sine', vol: 0.08, slide: 0.3 });
+        break;
+      case 'gun_plasma':
+        this.tone(300, 0.25, { type: 'sawtooth', vol: 0.07, slide: 2.4, filter: 2000 });
+        this.noiseHit(0.2, { freq: 2500, vol: 0.05, sweep: 600 });
+        break;
+      case 'gun_gauss':
+        this.tone(200, 0.12, { type: 'sine', vol: 0.06, slide: 8, attack: 0.1 });
+        this.noiseHit(0.18, { freq: 4000, vol: 0.12, t: t + 0.1, sweep: 800 });
+        this.tone(60, 0.2, { type: 'square', vol: 0.06, t: t + 0.1, filter: 400 });
+        break;
+      case 'gun_tesla':
+        for (let i = 0; i < 4; i++) this.noiseHit(0.05, { freq: 5000 + i * 700, q: 3, vol: 0.08, t: t + i * 0.035 });
+        this.tone(120, 0.2, { type: 'sawtooth', vol: 0.05, filter: 2400 });
+        break;
+      case 'gun_flame':
+        this.noiseHit(0.35, { freq: 500, type: 'lowpass', vol: 0.14, attack: 0.05, sweep: 900 });
+        break;
+      case 'gun_rocket':
+        this.noiseHit(0.5, { freq: 900, type: 'bandpass', q: 0.6, vol: 0.18, sweep: 2500, attack: 0.03 });
+        this.tone(110, 0.3, { type: 'sawtooth', vol: 0.05, slide: 1.8, filter: 800 });
+        break;
+      case 'gun_twang':
+        this.tone(220, 0.18, { type: 'triangle', vol: 0.12, slide: 0.6 });
+        this.noiseHit(0.1, { freq: 2600, vol: 0.05 });
+        break;
+      case 'gun_nail':
+        this.noiseHit(0.05, { freq: 3500, q: 2, vol: 0.12 });
+        this.tone(900, 0.05, { type: 'square', vol: 0.04, slide: 0.5 });
+        break;
+      case 'gun_guitar': {
+        const root = [52, 55, 57, 59][Math.floor(Math.random() * 4)];
+        [0, 7, 12].forEach((iv, i) => this.tone(NOTE(root + iv), 0.45, { type: 'sawtooth', vol: 0.05, filter: 1600 + i * 300, t: t + i * 0.015 }));
+        break;
+      }
+      case 'gun_flare':
+        this.noiseHit(0.25, { freq: 700, vol: 0.14, sweep: 2600, attack: 0.02 });
+        this.tone(400, 0.3, { type: 'triangle', vol: 0.04, slide: 1.8 });
+        break;
+      case 'gun_cryo':
+        this.noiseHit(0.3, { freq: 6000, type: 'highpass', vol: 0.08, attack: 0.03 });
+        this.tone(1400, 0.2, { type: 'sine', vol: 0.05, slide: 1.4 });
+        break;
+      case 'swing':
+        this.noiseHit(0.16, { freq: 700, q: 1.2, vol: 0.1, sweep: 2400, attack: 0.05 });
+        break;
+      case 'foam':
+        this.noiseHit(0.3, { freq: 3500, type: 'highpass', vol: 0.05, attack: 0.04 });
+        break;
+      case 'ignite':
+        this.noiseHit(0.6, { freq: 400, type: 'lowpass', vol: 0.2, sweep: 1600, attack: 0.08 });
+        this.noiseHit(0.1, { freq: 3000, vol: 0.06 });
+        break;
+      case 'impact':
+        this.noiseHit(0.07, { freq: 1200, q: 1.4, vol: 0.12 });
+        this.tone(110, 0.06, { type: 'square', vol: 0.05, slide: 0.5, filter: 800 });
+        break;
+      case 'boom':
+        this.noiseHit(0.9, { freq: 260, type: 'lowpass', vol: 0.35, sweep: 60, attack: 0.01 });
+        this.tone(55, 0.7, { type: 'sine', vol: 0.25, slide: 0.5 });
+        this.noiseHit(0.3, { freq: 2000, vol: 0.06, t: t + 0.05, sweep: 400 });
+        break;
+      case 'burrow':
+        this.noiseHit(0.6, { freq: 180, type: 'lowpass', vol: 0.22, attack: 0.1, sweep: 90 });
+        for (let i = 0; i < 4; i++) this.noiseHit(0.05, { freq: 900 + i * 300, q: 2, vol: 0.05, t: t + 0.1 + i * 0.07 });
+        break;
+      case 'splat':
+        this.noiseHit(0.14, { freq: 500, q: 1.5, vol: 0.14, sweep: 150 });
+        this.tone(180, 0.1, { type: 'sine', vol: 0.06, slide: 0.4 });
+        break;
+      case 'door_hit':
+        this.tone(160, 0.3, { type: 'triangle', vol: 0.1, slide: 0.8 });
+        this.noiseHit(0.12, { freq: 1800, q: 3, vol: 0.1 });
+        this.bell(NOTE(43), 0.5, 0.04);
+        break;
       case 'ding':
         // elevator arrival chime: two soft bells
         this.bell(NOTE(84), 0.9, 0.07);

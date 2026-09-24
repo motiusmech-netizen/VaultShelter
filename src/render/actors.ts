@@ -1,6 +1,7 @@
 /* Dweller movement, pathfinding and animation state (visual only). */
 import { ROOMS, type RoomType } from '../data/rooms';
 import { OUTFIT_BY_ID, VAULT_SUIT, WEAPON_BY_ID, type OutfitDef, type WeaponDef } from '../data/items';
+import { isMelee } from './weaponArt';
 import { clamp, rand } from '../core/util';
 import type { Game } from '../sim/game';
 import { COLS, FLOORS, type Dweller, type Room } from '../sim/types';
@@ -64,6 +65,20 @@ export interface Actor {
   queue: number;
   /** standing at the door while it rolls open */
   atGate: boolean;
+  /** set by the combat layer while fighting an incident */
+  cmb: CombatState | null;
+}
+
+export interface CombatState {
+  room: number;
+  gear: WeaponDef;
+  /** attack cycle 0..1, -1 when not attacking */
+  atk: number;
+  cd: number;
+  moving: boolean;
+  hurt: number;
+  target: number;
+  hitDone: boolean;
 }
 
 export type WorkStyle = 'arms' | 'type' | 'lift' | 'run' | 'dance' | 'read' | 'jump' | 'shoot' | 'guard' | 'talk' | 'idle' | 'play' | 'carry';
@@ -205,6 +220,7 @@ export class Actors {
       rush: false,
       queue: -1,
       atGate: false,
+      cmb: null,
     };
     // initial placement
     if (d.room === -1) {
@@ -410,6 +426,11 @@ export class Actors {
     this.doorAnim = open ? Math.min(1, this.doorAnim + dt * sp) : Math.max(0, this.doorAnim - dt * sp);
   }
 
+  /** Keep the vault door open (intruders running through it). */
+  holdDoor() {
+    this.doorHold = 0.8;
+  }
+
   /** Cancel a lift ride (e.g. picked up by the player) and put the dweller on the nearest floor. */
   releaseLift(a: Actor) {
     if (!a.lift) return;
@@ -440,9 +461,12 @@ export class Actors {
       tx = RAMP_X0 - 140;
     } else if (d.room === -1) {
       if (a.queue < 0) a.queue = this.freeQueueSlot();
-      key = 'wait' + a.queue;
+      const door = g.s.rooms.find((x) => x.type === 'door');
+      const raid = !!door?.incident && door.incident.kind !== 'fire';
+      // newcomers waiting outside run for cover while intruders storm the door
+      key = (raid ? 'flee' : 'wait') + a.queue;
       tf = -1;
-      tx = queueX(a.queue, a.seed);
+      tx = raid ? RAMP_X0 - 240 - a.queue * 16 : queueX(a.queue, a.seed);
       if (a.mode === 'hidden') {
         a.mode = 'idle';
         a.floor = -1;
@@ -493,7 +517,7 @@ export class Actors {
     if (a.lift) this.lifts.cancel(a);
     // dwellers sent to another room run there (like being called to duty)
     const reassigned = a.lastRoom !== -99 && a.lastRoom !== d.room && d.room > 0 && a.floor >= 0;
-    a.rush = reassigned || !!(d.room > 0 && g.room(d.room)?.incident);
+    a.rush = reassigned || !!(d.room > 0 && g.room(d.room)?.incident) || key.startsWith('flee');
     a.lastRoom = d.room;
     a.targetKey = key;
     a.homeX = tx;
@@ -565,6 +589,10 @@ export class Actors {
       return;
     }
     if (a.mode !== 'idle') return;
+    if (a.cmb) {
+      a.wanderT = 2;
+      return;
+    }
     // idle wandering near home
     a.wanderT -= dt;
     if (a.wanderT <= 0) {
@@ -707,35 +735,34 @@ export class Actors {
       pose.eyes = 'closed';
       return { pose, ko: false, style };
     }
-    // incident fighting
-    if (r && r.incident && inRoom && !d.child && !d.babyAt) {
+    // incident fighting (state driven by the combat layer)
+    if (a.cmb && a.mode === 'idle' && !d.child) {
+      const c = a.cmb;
       pose.view = 'side';
-      const w = weaponOf(g, d);
-      pose.weapon = w;
-      pose.mouth = 'open';
+      pose.weapon = c.gear;
+      pose.aim = true;
+      pose.attack = c.atk >= 0 ? c.atk : undefined;
+      pose.mouth = c.atk >= 0 && c.atk < 0.6 ? 'open' : 'grin';
       pose.eyes = 'wide';
-      pose.legA = 0.35;
-      pose.legB = -0.3;
-      pose.kneeA = 0.3;
-      pose.kneeB = 0.2;
-      if (r.incident.kind === 'fire') {
-        // beating the flames with a hand extinguisher motion
-        const ph = Math.sin(t * 9 + a.seed);
-        pose.armA = 1.2 + ph * 0.4;
-        pose.elbowA = 0.3;
-        pose.armB = 0.9 - ph * 0.3;
-        pose.bob = Math.abs(ph) * 0.8;
+      if (c.moving) {
+        const ph = a.anim * 15;
+        pose.legA = Math.sin(ph) * 0.7;
+        pose.legB = -Math.sin(ph) * 0.7;
+        pose.kneeA = Math.max(0, Math.sin(ph + 1.9)) * 1.2;
+        pose.kneeB = Math.max(0, Math.sin(ph + 1.9 + Math.PI)) * 1.2;
+        pose.bob = Math.abs(Math.cos(ph)) * 1.6;
+        pose.lean = 0.08;
       } else {
-        pose.aim = !!w;
-        pose.flash = a.flash > 0;
-        if (!w) {
-          // punching
-          const ph = Math.sin(t * 10 + a.seed);
-          pose.armA = 1.4 + ph * 0.25;
-          pose.elbowA = 0.3 - ph * 0.3;
-          pose.armB = 0.9 - ph * 0.3;
-          pose.elbowB = 1.6;
-        }
+        pose.legA = 0.35;
+        pose.legB = -0.3;
+        pose.kneeA = 0.3;
+        pose.kneeB = 0.2;
+        pose.bob = Math.sin(t * 6 + a.seed) * 0.3;
+      }
+      if (c.hurt > 0.4) {
+        pose.lean = -0.14;
+        pose.eyes = 'closed';
+        pose.mouth = 'open';
       }
       return { pose, ko: false, style: 'shoot' };
     }
@@ -855,14 +882,19 @@ export class Actors {
           pose.legA = pose.legB = j * 0.3;
           break;
         }
-        case 'shoot':
+        case 'shoot': {
+          // target practice: own firearm, or the range's revolver for melee fighters
+          const own = weaponOf(g, d);
           pose.view = 'side';
-          pose.weapon = weaponOf(g, d) ?? { id: 'x', name: { ru: '', en: '' }, dmg: [1, 1], rarity: 0, kind: 'pistol', color: '#5c6670' };
+          pose.weapon = own && !isMelee(own) ? own : WEAPON_BY_ID.w_revolver;
           pose.aim = true;
-          pose.flash = Math.sin(ph * 5) > 0.93;
+          const cyc = (ph * 0.55) % 1;
+          if (cyc < 0.5) pose.attack = cyc * 2;
           pose.legA = 0.3;
           pose.legB = -0.25;
+          pose.eyes = Math.sin(ph * 0.3) > 0.6 ? 'closed' : 'open';
           break;
+        }
         case 'guard':
           pose.view = 'side';
           pose.weapon = weaponOf(g, d);

@@ -7,6 +7,9 @@
  */
 import { mix, rgba, shade, type Ctx } from './gfx';
 import type { OutfitDef, WeaponDef } from '../data/items';
+import { drawWeapon, muzzleFlash, weaponProfile, type WeaponProfile } from './weaponArt';
+
+export { drawWeapon };
 import { HAIR_COLORS, SKIN_TONES } from '../sim/dwellers';
 import type { Look } from '../sim/types';
 
@@ -39,6 +42,8 @@ export interface Pose {
   reach?: boolean;
   /** breathing phase -1..1 */
   breath?: number;
+  /** weapon attack cycle 0..1 (undefined: not attacking) */
+  attack?: number;
 }
 
 export const DEFAULT_POSE: Pose = {
@@ -2521,7 +2526,15 @@ function drawSide(ctx: Ctx, R: Rig) {
   hairBackLayer(ctx, R, 1, 'side');
   ctx.restore();
   if (o.style === 'space') celFill(ctx, shade(o.top, -0.1), () => rr(ctx, -8.2, -29, 5, 12, 2));
-  if (!(p.aim && p.weapon)) {
+  const armed = p.weapon ? armedPose(p, j) : null;
+  if (armed?.far) {
+    // supporting hand on the barrel / handle
+    const sh: [number, number] = [-0.8, SH_Y + 0.3];
+    const el = ik(sh, armed.far, UPPER * 1.05, FORE * 1.05, 1);
+    limbSeg(ctx, el[0], el[1], armed.far[0], armed.far[1], foreW * 0.95, foreW * 0.86, farTone(bare ? skin : sc));
+    limbSeg(ctx, sh[0], sh[1], el[0], el[1], upperW * 0.95, upperW * 0.86, farTone(sc));
+    hand(ctx, armed.far[0], armed.far[1], farTone(hc), 1, 1.2, B.limb);
+  } else {
     limbSeg(ctx, j.elR[0], j.elR[1], j.haR[0], j.haR[1], foreW * 0.95, foreW * 0.86, farTone(bare ? skin : sc));
     limbSeg(ctx, j.shR[0], j.shR[1], j.elR[0], j.elR[1], upperW * 0.95, upperW * 0.86, farTone(sc));
     hand(ctx, j.haR[0], j.haR[1], farTone(hc), 1, 0, B.limb);
@@ -2566,14 +2579,14 @@ function drawSide(ctx: Ctx, R: Rig) {
   headSpace(ctx, R);
   drawHeadSide(ctx, R);
   ctx.restore();
-  if (p.aim && p.weapon) {
-    const sh: [number, number] = [0.4, SH_Y];
-    const el: [number, number] = [6.6, SH_Y + 0.8];
-    const ha: [number, number] = [12.4, SH_Y + 1.2];
-    drawWeapon(ctx, p.weapon, ha[0], ha[1] - 0.2, p.flash);
-    limbSeg(ctx, el[0], el[1], ha[0], ha[1], foreW, foreW * 0.9, bare ? skin : sc);
-    limbSeg(ctx, sh[0], sh[1], el[0], el[1], upperW, upperW * 0.9, sc);
-    hand(ctx, ha[0], ha[1], hc, 1, 1.6, B.limb);
+  if (armed && p.weapon) {
+    drawArmed(ctx, R, armed, p.weapon, foreW, upperW, bare ? skin : sc, sc, hc);
+    if (o.style === 'armor' || o.style === 'space') {
+      celFill(ctx, shade(o.top, 0.1), () => {
+        ctx.beginPath();
+        ctx.ellipse(0.6, SH_Y - 0.4, 3.8, 3.2, 0, 0, Math.PI * 2);
+      }, 0.7, 0.6);
+    }
     ctx.restore();
     return;
   }
@@ -2585,15 +2598,251 @@ function drawSide(ctx: Ctx, R: Rig) {
       ctx.ellipse(0.6, SH_Y - 0.4, 3.8, 3.2, 0, 0, Math.PI * 2);
     }, 0.7, 0.6);
   }
-  if (p.weapon && !p.aim) {
-    ctx.save();
-    ctx.translate(j.haL[0], j.haL[1]);
-    ctx.rotate(Math.PI / 2 - 0.25);
-    drawWeapon(ctx, p.weapon, 0, 0, false, 0.85);
-    ctx.restore();
-  }
   hand(ctx, j.haL[0], j.haL[1], hc, 1, 0, B.limb);
   ctx.restore();
+}
+
+// ------------------------------------------------------------------ armed side view
+interface Armed {
+  prof: WeaponProfile;
+  /** weapon origin (main hand) and rotation */
+  origin: [number, number];
+  angle: number;
+  /** supporting hand, when the grip uses both hands */
+  far: [number, number] | null;
+  /** animation parameter for the weapon art */
+  k: number;
+  flash: number;
+  /** melee: previous weapon angle for the motion trail */
+  trail: number | null;
+}
+
+function ik(s0: [number, number], h: [number, number], l1: number, l2: number, bend: number): [number, number] {
+  const dx = h[0] - s0[0];
+  const dy = h[1] - s0[1];
+  const d = Math.min(Math.hypot(dx, dy), l1 + l2 - 0.05);
+  const c = Math.max(-1, Math.min(1, (l1 * l1 + d * d - l2 * l2) / (2 * l1 * Math.max(d, 0.01))));
+  const a = Math.atan2(dy, dx) + bend * Math.acos(c);
+  return [s0[0] + Math.cos(a) * l1, s0[1] + Math.sin(a) * l1];
+}
+
+const easeOut = (u: number) => 1 - (1 - u) * (1 - u);
+const easeIn = (u: number) => u * u;
+const easeIO = (u: number) => u * u * (3 - 2 * u);
+const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
+
+function rot(v: [number, number], a: number): [number, number] {
+  const c = Math.cos(a);
+  const s2 = Math.sin(a);
+  return [v[0] * c - v[1] * s2, v[0] * s2 + v[1] * c];
+}
+
+/** Where the hands and the weapon are for the current grip and attack phase. */
+function armedPose(p: Pose, j: Joints): Armed {
+  const prof = weaponProfile(p.weapon!);
+  const a = p.attack;
+  const combat = !!p.aim;
+  const S: [number, number] = [0.4, SH_Y];
+  const withSupport = (o: [number, number], ang: number): [number, number] => {
+    const v = rot(prof.support, ang);
+    return [o[0] + v[0], o[1] + v[1]];
+  };
+  // recoil and flash for firearms
+  const burst = prof.burst > 1 && prof.shot !== 'pellets';
+  let rec = 0;
+  let flash = 0;
+  if (a !== undefined) {
+    if (burst) {
+      const on = a < 0.45;
+      rec = on ? 0.35 + 0.25 * Math.abs(Math.sin(a * 40)) : 0;
+      flash = on && Math.sin(a * 44) > 0.1 ? 1 : 0;
+    } else if (prof.shot === 'flame') {
+      rec = 0.1;
+      flash = 1;
+    } else {
+      rec = a < 0.22 ? (1 - a / 0.22) ** 2 : 0;
+      flash = a < 0.08 ? 1 - a / 0.08 : 0;
+    }
+  }
+  switch (prof.grip) {
+    case 'pistol': {
+      if (!combat) {
+        const o: [number, number] = [j.haL[0] + 1, j.haL[1] - 0.5];
+        return { prof, origin: o, angle: 1.05, far: null, k: 0, flash: 0, trail: null };
+      }
+      const o: [number, number] = [12.4 - rec * 1.8, SH_Y + 2.6 - rec * 0.6];
+      const ang = -rec * 0.32;
+      return { prof, origin: o, angle: ang, far: withSupport(o, ang), k: a ?? 0, flash, trail: null };
+    }
+    case 'rifle': {
+      if (!combat) {
+        const o: [number, number] = [4.6, SH_Y + 7.4];
+        const ang = 0.42;
+        return { prof, origin: o, angle: ang, far: withSupport(o, ang), k: 0, flash: 0, trail: null };
+      }
+      const o: [number, number] = [5 - rec * 1.4, SH_Y + 3.2 - rec * 0.3];
+      const ang = -rec * 0.12;
+      return { prof, origin: o, angle: ang, far: withSupport(o, ang), k: a ?? 0, flash, trail: null };
+    }
+    case 'hip': {
+      const shake = a !== undefined && prof.burst > 1 && a < 0.5 ? Math.sin(a * 90) * 0.35 : 0;
+      const o: [number, number] = [3.4 - rec * 0.8, SH_Y + 9.6 + shake];
+      const ang = combat ? -0.03 - rec * 0.04 : 0.18;
+      return { prof, origin: o, angle: ang, far: withSupport(o, ang), k: a ?? 0, flash, trail: null };
+    }
+    case 'shoulder': {
+      const o: [number, number] = [4.2 - rec * 1.6, SH_Y + 0.6];
+      const ang = combat ? -0.05 - rec * 0.1 : 0.05;
+      return { prof, origin: o, angle: ang, far: withSupport(o, ang), k: a ?? 0, flash, trail: null };
+    }
+    case 'sling': {
+      const pull = a === undefined ? 0 : a < 0.7 ? easeOut(a / 0.7) : 0;
+      const o: [number, number] = combat ? [11.5, SH_Y + 1.6] : [j.haL[0] + 0.5, j.haL[1]];
+      // fork upright: weapon +x points up
+      const ang = -Math.PI / 2;
+      const pouch: [number, number] = [o[0] - 4 - pull * 5, o[1] - 6.8];
+      return { prof, origin: o, angle: ang, far: combat ? pouch : null, k: pull, flash: 0, trail: null };
+    }
+    case 'guitar': {
+      const strum = a === undefined ? 0 : Math.sin(a * Math.PI * 2) * (a < 0.5 ? 1 : 0.3);
+      const o: [number, number] = [2.6, SH_Y + 11 - Math.abs(strum) * 0.6];
+      const ang = -0.52 - strum * 0.08;
+      const neck = rot([11, 0], ang);
+      return { prof, origin: [o[0] + 0.4 * strum, o[1]], angle: ang, far: [o[0] + neck[0], o[1] + neck[1]], k: a ?? 0, flash: 0, trail: null };
+    }
+    case 'fist': {
+      // boxing guard and a quick jab
+      let hx = 8.4;
+      let hy = SH_Y + 4.6;
+      if (a !== undefined) {
+        if (a < 0.16) {
+          const u = easeOut(a / 0.16);
+          hx = lerp(8.4, 14.6, u);
+          hy = lerp(SH_Y + 4.6, SH_Y + 2.2, u);
+        } else if (a < 0.5) {
+          const u = easeIO((a - 0.16) / 0.34);
+          hx = lerp(14.6, 8.4, u);
+          hy = lerp(SH_Y + 2.2, SH_Y + 4.6, u);
+        }
+      }
+      return { prof, origin: [hx, hy], angle: 0, far: [6.8, SH_Y + 2.4], k: a ?? 0, flash: 0, trail: null };
+    }
+    case 'blade': {
+      // quick stab
+      let hx = 8.6;
+      let hy = SH_Y + 5.4;
+      let ang = -0.35;
+      if (!combat) {
+        return { prof, origin: [j.haL[0] + 0.6, j.haL[1]], angle: 1.25, far: null, k: 0, flash: 0, trail: null };
+      }
+      if (a !== undefined) {
+        if (a < 0.3) {
+          const u = easeOut(a / 0.3);
+          hx = lerp(8.6, 3.2, u);
+          hy = lerp(SH_Y + 5.4, SH_Y + 3.6, u);
+          ang = lerp(-0.35, -0.6, u);
+        } else if (a < 0.44) {
+          const u = easeIn((a - 0.3) / 0.14);
+          hx = lerp(3.2, 13.6, u);
+          hy = lerp(SH_Y + 3.6, SH_Y + 2.2, u);
+          ang = lerp(-0.6, -0.08, u);
+        } else {
+          const u = easeIO((a - 0.44) / 0.56);
+          hx = lerp(13.6, 8.6, u);
+          hy = lerp(SH_Y + 2.2, SH_Y + 5.4, u);
+          ang = lerp(-0.08, -0.35, u);
+        }
+      }
+      return { prof, origin: [hx, hy], angle: ang, far: null, k: a ?? 0, flash: 0, trail: null };
+    }
+    default: {
+      // melee1 / melee2: overhead swing driven by the arm angle
+      const two = prof.grip === 'melee2';
+      const R = 12.4;
+      if (!combat) {
+        if (two) return { prof, origin: [4.2, SH_Y + 6.6], angle: -2.35, far: null, k: 0, flash: 0, trail: null };
+        return { prof, origin: [j.haL[0] + 0.6, j.haL[1]], angle: 1.3, far: null, k: 0, flash: 0, trail: null };
+      }
+      const REST = two ? 0.85 : 1.0;
+      const REST_W = two ? -1.1 : -0.9;
+      const UP_T = two ? -2.1 : -2.3;
+      const UP_W = two ? -2.8 : -2.9;
+      const HIT_T = two ? 0.35 : 0.55;
+      const HIT_W = two ? 0.15 : 0.35;
+      let th = REST;
+      let wa = REST_W;
+      let trail: number | null = null;
+      if (a !== undefined) {
+        if (a < 0.38) {
+          const u = easeOut(a / 0.38);
+          th = lerp(REST, UP_T, u);
+          wa = lerp(REST_W, UP_W, u);
+        } else if (a < 0.52) {
+          const u = easeIn((a - 0.38) / 0.14);
+          th = lerp(UP_T, HIT_T, u);
+          wa = lerp(UP_W, HIT_W, u);
+          trail = UP_W;
+        } else {
+          const u = easeIO((a - 0.52) / 0.48);
+          th = lerp(HIT_T, REST, u);
+          wa = lerp(HIT_W, REST_W, u);
+          if (u < 0.35) trail = lerp(UP_W, HIT_W, 0.6 + u);
+        }
+      }
+      const h: [number, number] = [S[0] + Math.cos(th) * R, S[1] + Math.sin(th) * R];
+      const far = two ? ((): [number, number] => {
+        const v = rot([-2.6, 0], wa);
+        return [h[0] + v[0], h[1] + v[1]];
+      })() : null;
+      return { prof, origin: h, angle: wa, far, k: a ?? 0, flash: 0, trail };
+    }
+  }
+}
+
+function drawArmed(ctx: Ctx, R: Rig, A: Armed, w: WeaponDef, foreW: number, upperW: number, foreC: string, upperC: string, hc: string) {
+  const { B } = R;
+  const now = performance.now() / 1000;
+  // motion trail of a swing
+  if (A.trail !== null) {
+    const reach = A.prof.muzzle[0];
+    ctx.save();
+    ctx.translate(A.origin[0], A.origin[1]);
+    ctx.globalCompositeOperation = 'lighter';
+    const a0 = Math.min(A.trail, A.angle);
+    const a1 = Math.max(A.trail, A.angle);
+    const g = ctx.createRadialGradient(0, 0, reach * 0.4, 0, 0, reach + 2);
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(1, rgba(w.glow ?? '#ffffff', 0.45));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0, reach + 2, a0, a1);
+    ctx.arc(0, 0, reach * 0.45, a1, a0, true);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.save();
+  ctx.translate(A.origin[0], A.origin[1]);
+  ctx.rotate(A.angle);
+  A.prof.draw(ctx, w, now, A.k);
+  if (A.flash > 0) muzzleFlash(ctx, w, A.prof.muzzle[0], A.prof.muzzle[1], A.flash);
+  ctx.restore();
+  // main arm and hand on the grip
+  const sh: [number, number] = [0.4, SH_Y];
+  const hnd = A.origin;
+  const el = ik(sh, hnd, UPPER * 1.05, FORE * 1.05, 1);
+  limbSeg(ctx, el[0], el[1], hnd[0], hnd[1], foreW, foreW * 0.9, foreC);
+  limbSeg(ctx, sh[0], sh[1], el[0], el[1], upperW, upperW * 0.9, upperC);
+  hand(ctx, hnd[0], hnd[1], hc, 1, 1.4, B.limb);
+}
+
+/** Muzzle position relative to the feet for a dweller aiming this weapon (facing +x). */
+export function muzzlePoint(w: WeaponDef, child = false): [number, number] {
+  const p = { ...DEFAULT_POSE, view: 'side' as const, aim: true, weapon: w };
+  const A = armedPose(p, sideJoints(p));
+  const m = rot(A.prof.muzzle, A.angle);
+  const s = 0.9 * (child ? 0.64 : 1);
+  return [(A.origin[0] + m[0]) * s, (A.origin[1] + m[1] - UP) * s];
 }
 
 function drawHeadSide(ctx: Ctx, R: Rig) {
@@ -3768,101 +4017,6 @@ function drawHeld(ctx: Ctx, p: Pose, j: Joints) {
 }
 
 // ------------------------------------------------------------------ weapons
-export function drawWeapon(ctx: Ctx, w: WeaponDef, x: number, y: number, flash?: boolean, s = 1) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.scale(s, s);
-  const c = w.color;
-  const t = tones(c);
-  const fill = (fn: () => void, col = c) => {
-    fn();
-    ctx.fillStyle = col;
-    ctx.fill();
-    ctx.lineWidth = 0.5;
-    ctx.strokeStyle = t.line;
-    ctx.stroke();
-  };
-  switch (w.kind) {
-    case 'pistol':
-    case 'laser':
-      fill(() => rr(ctx, -1.6, -2.4, 9, 2.8, 0.8));
-      fill(() => rr(ctx, -1, -0.2, 2.6, 4.4, 0.6), shade(c, -0.25));
-      if (w.glow) {
-        ctx.fillStyle = w.glow;
-        ctx.fillRect(2, -1.6, 4.8, 0.9);
-      }
-      ctx.fillStyle = rgba('#ffffff', 0.35);
-      ctx.fillRect(-1, -2.2, 7.6, 0.5);
-      break;
-    case 'rifle':
-    case 'plasma':
-    case 'shotgun':
-      fill(() => rr(ctx, -4, -2.3, 18, 2.8, 0.8));
-      fill(() => rr(ctx, -7.4, -1.8, 4.6, 3.8, 1.2), shade(c, -0.2));
-      fill(() => rr(ctx, 0.4, -0.2, 2.2, 3.6, 0.6), shade(c, -0.3));
-      if (w.kind === 'shotgun') fill(() => rr(ctx, 4, -3.2, 10, 1.2, 0.5), shade(c, 0.1));
-      if (w.glow) {
-        ctx.fillStyle = w.glow;
-        ctx.fillRect(2, -1.8, 8, 1);
-      }
-      ctx.fillStyle = rgba('#ffffff', 0.3);
-      ctx.fillRect(-3.4, -2.1, 16, 0.5);
-      break;
-    case 'heavy':
-      fill(() => rr(ctx, -5, -3.4, 19, 5.6, 1.6));
-      ctx.fillStyle = shade(c, 0.2);
-      for (let i = 0; i < 3; i++) ctx.fillRect(10, -2.6 + i * 1.6, 7, 1);
-      if (w.glow) {
-        ctx.fillStyle = w.glow;
-        ctx.fillRect(-2, -1, 9, 1.2);
-      }
-      break;
-    case 'sling':
-      ctx.strokeStyle = c;
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(0, 2);
-      ctx.lineTo(0, -1);
-      ctx.lineTo(-1.8, -4.4);
-      ctx.moveTo(0, -1);
-      ctx.lineTo(1.8, -4.4);
-      ctx.stroke();
-      break;
-    case 'guitar':
-      fill(() => {
-        ctx.beginPath();
-        ctx.ellipse(-2, 0, 4.4, 3.2, 0, 0, Math.PI * 2);
-      });
-      fill(() => rr(ctx, 1, -0.7, 11, 1.4, 0.5), '#3a2a20');
-      break;
-    case 'blade':
-      fill(() => rr(ctx, -2.4, -0.9, 3.4, 1.8, 0.5), '#3a2a20');
-      fill(() => {
-        ctx.beginPath();
-        ctx.moveTo(1, -1.2);
-        ctx.lineTo(9, -0.4);
-        ctx.lineTo(1, 1.1);
-        ctx.closePath();
-      });
-      break;
-    default:
-      fill(() => rr(ctx, -1, -0.8, 11, 1.6, 0.6), '#6b4a32');
-      fill(() => rr(ctx, 7.4, -2.8, 3.8, 5.6, 1));
-  }
-  if (flash) {
-    const fx = w.kind === 'pistol' || w.kind === 'laser' ? 8.4 : w.kind === 'heavy' ? 18 : 14.5;
-    ctx.globalCompositeOperation = 'lighter';
-    const col = w.glow ?? '#ffd46a';
-    const g = ctx.createRadialGradient(fx, -0.9, 0, fx, -0.9, 6);
-    g.addColorStop(0, 'rgba(255,255,255,0.95)');
-    g.addColorStop(0.3, col);
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(fx - 6, -7, 12, 12);
-  }
-  ctx.restore();
-}
-
 /** Cheap silhouette for far zoom levels. */
 export function drawCharacterLOD(ctx: Ctx, look: Look, outfit: OutfitDef, child: boolean) {
   const s = (child ? 0.66 : 1) * 0.9;

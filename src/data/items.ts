@@ -70,6 +70,8 @@ export const WEAPONS: WeaponDef[] = [
   { id: 'w_air', name: { ru: 'Пневматическая винтовка', en: 'Air Rifle' }, dmg: [3, 5], rarity: 0, kind: 'rifle', color: '#6d7f63' },
   { id: 'w_revolver', name: { ru: 'Старый револьвер', en: 'Old Revolver' }, dmg: [3, 6], rarity: 0, kind: 'pistol', color: '#5c6670' },
   { id: 'w_hunting', name: { ru: 'Охотничье ружьё', en: 'Hunting Rifle' }, dmg: [4, 7], rarity: 0, kind: 'rifle', color: '#7b5a3a' },
+  { id: 'w_crowbar', name: { ru: 'Монтировка', en: 'Crowbar' }, dmg: [2, 4], rarity: 0, kind: 'melee', color: '#b8322a' },
+  { id: 'w_flare', name: { ru: 'Сигнальный пистолет', en: 'Flare Gun' }, dmg: [2, 5], rarity: 0, kind: 'pistol', color: '#f27a24', glow: '#ff5a3a' },
   // rare
   { id: 'w_shotgun', name: { ru: 'Двустволка', en: 'Double Barrel' }, dmg: [5, 9], rarity: 1, kind: 'shotgun', color: '#6b4b32' },
   { id: 'w_smg', name: { ru: 'Пистолет-пулемёт', en: 'Submachine Gun' }, dmg: [5, 8], rarity: 1, kind: 'rifle', color: '#3f474f' },
@@ -78,6 +80,10 @@ export const WEAPONS: WeaponDef[] = [
   { id: 'w_sledge', name: { ru: 'Кувалда', en: 'Sledgehammer' }, dmg: [7, 10], rarity: 1, kind: 'melee', color: '#6f7a83' },
   { id: 'w_lasr', name: { ru: 'Лазерная винтовка', en: 'Laser Rifle' }, dmg: [8, 11], rarity: 1, kind: 'laser', color: '#8c969f', glow: '#ff4b4b' },
   { id: 'w_crossbow', name: { ru: 'Арбалет', en: 'Crossbow' }, dmg: [7, 11], rarity: 1, kind: 'rifle', color: '#6e4d2c' },
+  { id: 'w_machete', name: { ru: 'Мачете', en: 'Machete' }, dmg: [5, 9], rarity: 1, kind: 'blade', color: '#c9d2d9' },
+  { id: 'w_harpoon', name: { ru: 'Гарпунное ружьё', en: 'Harpoon Gun' }, dmg: [6, 10], rarity: 1, kind: 'rifle', color: '#2f5a7a' },
+  { id: 'w_flamer', name: { ru: 'Огнемёт «Самовар»', en: '"Samovar" Flamer' }, dmg: [6, 10], rarity: 1, kind: 'heavy', color: '#c9a44a', glow: '#ff8a2a' },
+  { id: 'w_cryo', name: { ru: 'Криопистолет «Пломбир»', en: '"Sundae" Cryo Pistol' }, dmg: [7, 10], rarity: 1, kind: 'laser', color: '#e8eef4', glow: '#8fe8ff' },
   // legendary
   { id: 'w_plasma', name: { ru: 'Плазменная винтовка «Заря»', en: '"Dawn" Plasma Rifle' }, dmg: [11, 15], rarity: 2, kind: 'plasma', color: '#4f5d58', glow: '#6aff8c' },
   { id: 'w_gauss', name: { ru: 'Гаусс-винтовка', en: 'Gauss Rifle' }, dmg: [12, 16], rarity: 2, kind: 'rifle', color: '#46505a', glow: '#5fd3ff' },
@@ -86,6 +92,8 @@ export const WEAPONS: WeaponDef[] = [
   { id: 'w_guitar', name: { ru: 'Электрогитара «Аккорд»', en: '"Chord" Electric Guitar' }, dmg: [11, 17], rarity: 2, kind: 'guitar', color: '#d9432e' },
   { id: 'w_ladle', name: { ru: 'Золотой половник', en: 'Golden Ladle' }, dmg: [14, 18], rarity: 2, kind: 'melee', color: '#ffcf4a' },
   { id: 'w_minigun', name: { ru: 'Миниган «Ураган»', en: '"Hurricane" Minigun' }, dmg: [14, 20], rarity: 2, kind: 'heavy', color: '#3a4148' },
+  { id: 'w_saber', name: { ru: 'Сабля «Полярная звезда»', en: '"North Star" Saber' }, dmg: [13, 18], rarity: 2, kind: 'blade', color: '#e8f0f6', glow: '#8fd8ff' },
+  { id: 'w_rocket', name: { ru: 'Ракетомёт «Салют»', en: '"Fireworks" Launcher' }, dmg: [15, 21], rarity: 2, kind: 'heavy', color: '#2f6b4a' },
 ];
 
 export const OUTFITS: OutfitDef[] = [

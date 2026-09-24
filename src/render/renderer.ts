@@ -15,7 +15,9 @@ import { drawVaultDoorDisc } from './vaultDoor';
 import { doorDyn } from './roomArtCore';
 import { carBack, carFront, counterweight, hoist, landingFront, CAR_H } from './elevatorArt';
 import { carFeetY } from './lifts';
-import { drawBug, drawCat, drawFlames, drawMole, drawPet, drawRaider, drawRobot, drawSpikeback } from './creatures';
+import { drawCat, drawFlames, drawPet, drawRobot } from './creatures';
+import { Combat } from './combat';
+import type { SfxName } from '../audio/audio';
 import { CELL_W, FEET_Y, FLOOR_FRONT, FLOOR_H, WALL_TOP, floorY, roomW, roomX, roomY, VAULT_Y0 } from './world';
 import { iconImage } from '../ui/icons';
 import { getLang } from '../i18n';
@@ -69,7 +71,8 @@ export class Renderer {
   hudTarget: (kind: string) => { x: number; y: number } | null = () => null;
   robots = new Map<number, RobotActor>();
   /** audio hook for world sounds that should only play when on screen */
-  onSound: (name: 'door' | 'ding', x: number, y: number) => void = () => {};
+  onSound: (name: SfxName, x: number, y: number) => void = () => {};
+  combat: Combat;
   private lastDoor = 0;
   quality = 1;
   shake = 0;
@@ -78,6 +81,7 @@ export class Renderer {
   constructor(public canvas: HTMLCanvasElement, public g: Game) {
     this.ctx = canvas.getContext('2d', { alpha: false })!;
     this.actors = new Actors(g);
+    this.combat = new Combat(g, this.actors, this.fx);
     this.hookActors();
     this.cache.lang = getLang();
     this.cache.vault = g.s.vault;
@@ -87,6 +91,7 @@ export class Renderer {
   setGame(g: Game) {
     this.g = g;
     this.actors = new Actors(g);
+    this.combat = new Combat(g, this.actors, this.fx);
     this.hookActors();
     this.cache.clear();
     this.cache.vault = g.s.vault;
@@ -96,6 +101,10 @@ export class Renderer {
 
   private hookActors() {
     this.actors.lifts.onArrive = (sh) => this.onSound('ding', sh.col * CELL_W + CELL_W / 2, carFeetY(sh.car.pos) - 30);
+    this.combat.onSound = (name, x, y) => this.onSound(name, x, y);
+    this.combat.onShake = (k) => {
+      this.shake = Math.max(this.shake, Math.min(0.9, k * 0.12));
+    };
   }
 
   resize() {
@@ -114,6 +123,7 @@ export class Renderer {
     this.t += dt;
     this.cam.update(dt);
     this.actors.update(dt);
+    this.combat.update(dt);
     this.fx.quality = this.quality;
     this.fx.update(dt);
     this.updateRobots(dt);
@@ -272,6 +282,8 @@ export class Renderer {
     const want = Math.min(3, z * dpr * (this.quality >= 1 ? 1 : 0.7));
     for (const r of rooms) this.drawRoom(r, want);
     this.drawShafts(v);
+    this.combat.drawDecals(ctx, v);
+    this.combat.drawFoes(ctx, v, this.t, z * dpr < 0.55);
 
     // characters sorted
     this.drawActors(v);
@@ -294,6 +306,7 @@ export class Renderer {
       drawCat(ctx, this.t);
       ctx.restore();
     }
+    this.combat.drawShots(ctx, this.t);
     this.fx.drawWorld(ctx);
 
     // build spots
@@ -403,8 +416,13 @@ export class Renderer {
       const alarm = 0.5 + 0.5 * Math.sin(this.t * 6);
       ctx.fillStyle = rgba('#ff2a1a', 0.1 + alarm * 0.12);
       ctx.fillRect(4, 9, w - 8, FLOOR_FRONT - 9);
-      if (inc.kind === 'fire') drawFlames(ctx, 8, w - 16, FEET_Y + 2, this.t, clamp(inc.hp / inc.maxHp + 0.3, 0.4, 1.3));
-      else this.drawEnemies(r, w);
+      if (inc.kind === 'fire') drawFlames(ctx, 8, w - 16, FEET_Y + 2, this.t, clamp(inc.hp / inc.maxHp + 0.3, 0.4, 1.3) * this.combat.fireGrowth(r.id));
+      else if (!(r.type === 'door' && r.doorHp > 0 && inc.kind === 'raiders')) {
+        // intruders' remaining strength
+        const k = inc.hp / inc.maxHp;
+        fillRR(ctx, w - 70, 18, 60, 4, 2, 'rgba(0,0,0,0.6)');
+        fillRR(ctx, w - 70, 18, 60 * clamp(k, 0, 1), 4, 2, '#ff4a3a');
+      }
       // hazard lamp
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
@@ -454,52 +472,6 @@ export class Renderer {
     ctx.restore();
   }
 
-  private enemyPos(r: Room, i: number, n: number, w: number): number {
-    const inc = r.incident!;
-    const moving = inc.kind === 'bugs' || inc.kind === 'moles';
-    const base = w * (0.55 + (0.4 * (i + 0.5)) / n);
-    if (moving) return clamp(base + Math.sin(this.t * (1.2 + i * 0.3) + i * 2) * 26, 16, w - 16);
-    return base;
-  }
-
-  private drawEnemies(r: Room, w: number) {
-    const ctx = this.ctx;
-    const inc = r.incident!;
-    const n = Math.min(6, inc.count);
-    if (r.type === 'door' && inc.kind === 'raiders' && r.doorHp > 0) return;
-    for (let i = 0; i < n; i++) {
-      const ex = this.enemyPos(r, i, n, w);
-      ctx.save();
-      ctx.translate(ex, FEET_Y);
-      const facing = -1;
-      switch (inc.kind) {
-        case 'bugs': {
-          const dirx = Math.cos(this.t * (1.2 + i * 0.3) + i * 2) >= 0 ? 1 : -1;
-          ctx.scale(dirx, 1);
-          drawBug(ctx, this.t, i);
-          break;
-        }
-        case 'moles':
-          ctx.scale(facing, 1);
-          drawMole(ctx, this.t, i);
-          break;
-        case 'raiders':
-          drawRaider(ctx, i, this.t, facing, true);
-          break;
-        case 'spikes':
-          ctx.scale(facing * 0.9, 0.9);
-          drawSpikeback(ctx, this.t, i);
-          break;
-      }
-      ctx.restore();
-      if (Math.random() < 0.02) this.fx.emit('spark', roomX(r) + ex, roomY(r) + FEET_Y - 14, 3);
-    }
-    // enemy HP bar
-    const k = inc.hp / inc.maxHp;
-    fillRR(ctx, w - 70, 18, 60, 4, 2, 'rgba(0,0,0,0.6)');
-    fillRR(ctx, w - 70, 18, 60 * clamp(k, 0, 1), 4, 2, '#ff4a3a');
-  }
-
   private drawActors(v: { l: number; r: number; t: number; b: number }) {
     const g = this.g;
     const lod = this.cam.zoom * this.dpr < 0.55;
@@ -515,25 +487,8 @@ export class Renderer {
     list.sort((p, q) => p.a.y - q.a.y || p.a.x - q.a.x);
     for (const { d, a } of list) {
       const r = d.room > 0 ? g.room(d.room) : undefined;
-      // face enemies during incidents
-      if (r?.incident && a.mode === 'idle' && r.incident.kind !== 'fire') {
-        const w = roomW(r);
-        const n = Math.min(6, r.incident.count);
-        let best = roomX(r) + this.enemyPos(r, 0, n, w);
-        for (let i = 1; i < n; i++) {
-          const ex = roomX(r) + this.enemyPos(r, i, n, w);
-          if (Math.abs(ex - a.x) < Math.abs(best - a.x)) best = ex;
-        }
-        a.dir = best >= a.x ? 1 : -1;
-        a.fightT -= 1 / 60;
-        if (a.fightT <= 0) {
-          a.fightT = rand(0.35, 0.8);
-          a.flash = 0.08;
-          if (Math.random() < 0.6) this.fx.emit('spark', best + rand(-4, 4), a.y - 16 + rand(-6, 6), 2);
-        }
-      } else if (r?.incident?.kind === 'fire' && a.mode === 'idle') {
-        a.dir = a.x < roomX(r) + roomW(r) / 2 ? 1 : -1;
-        if (Math.random() < 0.3) this.fx.emit('smoke', a.x + a.dir * 16, a.y - 14, 1, { color: '#ffffff' });
+      if (a.cmb) {
+        // facing is handled by the combat layer
       } else if (r?.type === 'door' && a.mode === 'idle') {
         a.dir = -1;
       } else if (d.partner && a.mode === 'idle') {

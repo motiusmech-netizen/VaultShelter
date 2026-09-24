@@ -13,9 +13,11 @@ import type { Card } from '../sim/crates';
 import type { Item, MissionRun } from '../sim/types';
 import { dwellerName, statTotal, weaponDamage } from '../sim/dwellers';
 import { S_AGI, S_STR, S_PER } from '../data/stats';
-import { drawCharacter, DEFAULT_POSE } from '../render/dwellerArt';
+import { drawCharacter, DEFAULT_POSE, muzzlePoint } from '../render/dwellerArt';
 import { outfitOf, weaponOf } from '../render/actors';
-import { drawBug, drawMole, drawPet, drawRaider, drawRobot, drawSpikeback } from '../render/creatures';
+import { drawBug, drawMole, drawPet, drawRobot, drawSpikeback, raiderSpec, type RaiderSpec } from '../render/creatures';
+import { FISTS, isMelee, weaponProfile } from '../render/weaponArt';
+import type { WeaponDef } from '../data/items';
 import { RewardChips } from './panelsMeta';
 import { Game } from '../sim/game';
 
@@ -508,15 +510,39 @@ interface Fighter {
   id?: number;
   hitT: number;
   flash: number;
+  /** attack animation 0..1, -1 idle */
+  atk: number;
+  /** who is being attacked (index into fs) */
+  tgt: number;
+  spec?: RaiderSpec;
+}
+
+interface ArenaShot {
+  x: number;
+  y: number;
+  tx: number;
+  ty: number;
+  t: number;
+  life: number;
+  kind: string;
+  color: string;
+}
+
+const easeQ = (u: number) => u * u * (3 - 2 * u);
+/** 0..1 how far a melee attacker has dashed towards its target */
+function dashOf(atk: number) {
+  if (atk < 0) return 0;
+  return atk < 0.42 ? easeQ(atk / 0.42) : atk < 0.62 ? 1 : 1 - easeQ((atk - 0.62) / 0.38);
 }
 
 function BattleModal({ run }: { run: MissionRun }) {
   const g = app.g;
+  const gearOf = (f: Fighter): WeaponDef | null => (f.side === 0 ? (f.id ? weaponOf(g, g.dweller(f.id)!) : null) : f.spec?.weapon ?? null);
   const m = MISSION_BY_ID[run.id];
   const ref = useRef<HTMLCanvasElement>(null);
   const [state, setState] = useState<'fight' | 'win' | 'lose'>('fight');
   const [crits, setCrits] = useState(0);
-  const sim = useRef<{ fs: Fighter[]; ring: number; floats: { x: number; y: number; s: string; t: number; c: string }[]; over: boolean; crit: number; auto: boolean }>();
+  const sim = useRef<{ fs: Fighter[]; ring: number; floats: { x: number; y: number; s: string; t: number; c: string }[]; over: boolean; crit: number; auto: boolean; shots: ArenaShot[] }>();
   if (!sim.current) {
     const fs: Fighter[] = [];
     run.team.forEach((id, i) => {
@@ -534,12 +560,14 @@ function BattleModal({ run }: { run: MissionRun }) {
         id,
         hitT: 0,
         flash: 0,
+        atk: -1,
+        tgt: -1,
       });
     });
     const n = m.diff < 2 ? 2 : 3;
     for (let i = 0; i < n; i++)
-      fs.push({ side: 1, hp: 18 * m.diff, max: 18 * m.diff, dmg: 2.4 * m.diff, cd: 0.8 + i * 0.35, x: 0.66 + i * 0.1, y: 0.8 - (i % 2) * 0.06, kind: m.enemies[0].kind, hitT: 0, flash: 0 });
-    sim.current = { fs, ring: 0, floats: [], over: false, crit: 0, auto: false };
+      fs.push({ side: 1, hp: 18 * m.diff, max: 18 * m.diff, dmg: 2.4 * m.diff, cd: 0.8 + i * 0.35, x: 0.66 + i * 0.1, y: 0.8 - (i % 2) * 0.06, kind: m.enemies[0].kind, hitT: 0, flash: 0, atk: -1, tgt: -1, spec: m.enemies[0].kind === 'raider' ? raiderSpec(i * 17 + m.diff * 3 + 5) : undefined });
+    sim.current = { fs, ring: 0, floats: [], over: false, crit: 0, auto: false, shots: [] };
   }
   useEffect(() => {
     const c = ref.current!;
@@ -583,6 +611,16 @@ function BattleModal({ run }: { run: MissionRun }) {
             tgt.hp -= dmg;
             tgt.hitT = 0.2;
             f.flash = 0.1;
+            f.atk = 0;
+            f.tgt = S.fs.indexOf(tgt);
+            const w = gearOf(f);
+            if (w && !isMelee(w)) {
+              const sc = Math.min(W / 180, 2.6);
+              const m = muzzlePoint(w);
+              const dir = f.side === 0 ? 1 : -1;
+              const prof = weaponProfile(w);
+              S.shots.push({ x: f.x * W + m[0] * sc * dir, y: f.y * H + m[1] * sc, tx: tgt.x * W, ty: tgt.y * H - 20 * sc, t: 0, life: prof.shot === 'laser' || prof.shot === 'gauss' || prof.shot === 'tesla' || prof.shot === 'cryo' ? 0.14 : 0.16, kind: prof.shot, color: w.glow ?? '#ffe08a' });
+            }
             S.floats.push({ x: tgt.x * W + rand(-8, 8), y: tgt.y * H - 50, s: '-' + Math.round(dmg), t: 0, c: f.side === 0 ? '#ffffff' : '#ff8a7a' });
             audio.play('hit');
             f.cd = f.side === 0 ? 1.1 - Math.min(0.5, (g.dweller(f.id!) ? statTotal(g.s, g.dweller(f.id!)!, S_AGI) : 0) * 0.04) : 1.3;
@@ -596,29 +634,38 @@ function BattleModal({ run }: { run: MissionRun }) {
           audio.play(aliveA ? 'levelup' : 'rush_fail');
         }
       }
+      for (const f of S.fs) if (f.atk >= 0) f.atk = f.atk + dt / 0.6 >= 1 ? -1 : f.atk + dt / 0.6;
+      for (const sh of S.shots) sh.t += dt;
+      S.shots = S.shots.filter((sh) => sh.t < sh.life);
       // draw
       const ground = H * 0.82;
       ctx.fillStyle = 'rgba(0,0,0,0.15)';
       ctx.fillRect(0, ground, W, H - ground);
       for (const f of S.fs) {
         ctx.save();
-        ctx.translate(f.x * W, f.y * H);
+        const w = gearOf(f);
+        const melee = !w || isMelee(w);
+        const tg = f.tgt >= 0 ? S.fs[f.tgt] : null;
+        const dash = melee && tg && f.kind !== 'robot' ? dashOf(f.atk) * (tg.x - f.x) * W * 0.62 : 0;
+        ctx.translate(f.x * W + dash, f.y * H);
         const sc = Math.min(W / 180, 2.6);
         ctx.scale(sc, sc);
-        if (f.hp <= 0) {
-          ctx.globalAlpha = 0.35;
+        if (f.hp <= 0 && (f.side === 0 || f.kind === 'raider')) {
+          ctx.globalAlpha = 0.45;
           ctx.rotate(f.side === 0 ? -1.4 : 1.4);
         }
         if (f.hitT > 0) ctx.translate(f.side === 0 ? -2 : 2, 0);
+        const atk = f.atk >= 0 && f.hp > 0 ? f.atk : undefined;
         if (f.side === 0) {
           const d = g.dweller(f.id!);
           if (d)
-            drawCharacter(ctx, d.look, outfitOf(g, d), { ...DEFAULT_POSE, view: 'side', aim: true, weapon: weaponOf(g, d) ?? { id: 'x', name: { ru: '', en: '' }, dmg: [1, 1], rarity: 0, kind: 'pistol', color: '#5c6670' }, flash: f.flash > 0, mouth: 'open', eyes: f.hp <= 0 ? 'x' : 'open' }, d.gender);
+            drawCharacter(ctx, d.look, outfitOf(g, d), { ...DEFAULT_POSE, view: 'side', aim: f.hp > 0, weapon: w ?? FISTS, attack: atk, mouth: 'open', eyes: f.hp <= 0 ? 'x' : f.hitT > 0 ? 'closed' : 'open', legA: 0.32, legB: -0.28, kneeA: 0.3, kneeB: 0.2 }, d.gender);
         } else {
           ctx.scale(-1, 1);
+          const st = { t: tt + S.fs.indexOf(f), seed: S.fs.indexOf(f) * 7, move: dash !== 0 ? 1 : 0, atk, hurt: f.hitT > 0 && f.hp > 0 ? f.hitT * 5 : 0, dead: f.hp <= 0 ? 1 : 0 };
           switch (f.kind) {
             case 'raider':
-              drawRaider(ctx, S.fs.indexOf(f), tt, 1, f.flash > 0);
+              if (f.spec) drawCharacter(ctx, f.spec.look, f.spec.outfit, { ...DEFAULT_POSE, view: 'side', aim: f.hp > 0, weapon: f.spec.weapon, attack: atk, mouth: 'grin', eyes: f.hp <= 0 ? 'x' : 'open', legA: 0.32, legB: -0.28, kneeA: 0.3, kneeB: 0.2 }, f.spec.gender);
               break;
             case 'robot':
               ctx.translate(0, -16);
@@ -626,19 +673,19 @@ function BattleModal({ run }: { run: MissionRun }) {
               drawRobot(ctx, tt, 1, true);
               break;
             case 'bug':
-              ctx.scale(1.4, 1.4);
-              drawBug(ctx, tt, S.fs.indexOf(f));
+              ctx.scale(1.3, 1.3);
+              drawBug(ctx, st);
               break;
             case 'spike':
-              drawSpikeback(ctx, tt, S.fs.indexOf(f));
+              drawSpikeback(ctx, st);
               break;
             case 'dog':
               ctx.scale(2, 2);
               drawPet(ctx, 'dog', '#6a5a4a', '#3a2a1a', tt, false);
               break;
             default:
-              ctx.scale(1.2, 1.2);
-              drawMole(ctx, tt, S.fs.indexOf(f));
+              ctx.scale(1.1, 1.1);
+              drawMole(ctx, st);
           }
         }
         ctx.restore();
@@ -651,6 +698,38 @@ function BattleModal({ run }: { run: MissionRun }) {
           ctx.fillRect(f.x * W - bw / 2, f.y * H + 6, bw * clamp(f.hp / f.max, 0, 1), 5);
         }
       }
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const sh of S.shots) {
+        const u = sh.t / sh.life;
+        const beam = sh.kind === 'laser' || sh.kind === 'gauss' || sh.kind === 'tesla' || sh.kind === 'cryo';
+        if (beam) {
+          ctx.strokeStyle = sh.color;
+          ctx.globalAlpha = 1 - u;
+          ctx.lineWidth = sh.kind === 'gauss' ? 5 : 3;
+          ctx.beginPath();
+          ctx.moveTo(sh.x, sh.y);
+          ctx.lineTo(sh.tx, sh.ty);
+          ctx.stroke();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+        } else {
+          const x = sh.x + (sh.tx - sh.x) * u;
+          const y = sh.y + (sh.ty - sh.y) * u;
+          const ang = Math.atan2(sh.ty - sh.y, sh.tx - sh.x);
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = sh.color;
+          ctx.lineWidth = sh.kind === 'plasma' || sh.kind === 'flare' || sh.kind === 'rocket' ? 6 : 2.2;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x - Math.cos(ang) * 22, y - Math.sin(ang) * 22);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+      ctx.globalAlpha = 1;
       for (const fl of S.floats) {
         fl.t += dt;
         ctx.globalAlpha = Math.max(0, 1 - fl.t / 1.1);

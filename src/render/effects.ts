@@ -3,7 +3,7 @@ import { rand } from '../core/util';
 import { glow, rgba, type Ctx } from './gfx';
 import { iconImage } from '../ui/icons';
 
-export type PKind = 'spark' | 'smoke' | 'confetti' | 'dust' | 'heart' | 'star' | 'drop' | 'flame' | 'zzz' | 'note' | 'ember';
+export type PKind = 'spark' | 'smoke' | 'confetti' | 'dust' | 'heart' | 'star' | 'drop' | 'flame' | 'zzz' | 'note' | 'ember' | 'foam' | 'steam' | 'goo' | 'debris' | 'frost' | 'ring' | 'shell';
 
 interface P {
   k: PKind;
@@ -17,6 +17,8 @@ interface P {
   color: string;
   rot: number;
   vr: number;
+  /** ground level for bouncing particles */
+  floor?: number;
 }
 
 interface Floater {
@@ -101,7 +103,36 @@ export class Effects {
         p.vy = rand(-35, -18);
         p.max = rand(0.5, 0.9);
         p.size = rand(3, 6);
+      } else if (k === 'steam') {
+        p.vx = rand(-8, 8);
+        p.vy = rand(-26, -12);
+        p.max = rand(0.9, 1.6);
+        p.size = rand(3, 6);
+      } else if (k === 'goo') {
+        p.vx = rand(-45, 45);
+        p.vy = rand(-70, -20);
+        p.max = rand(0.5, 0.9);
+        p.size = rand(0.8, 1.8);
+      } else if (k === 'debris') {
+        p.vx = rand(-70, 70);
+        p.vy = rand(-110, -30);
+        p.max = rand(0.8, 1.4);
+        p.size = rand(1.2, 3);
+      } else if (k === 'frost') {
+        p.vx = rand(-25, 25);
+        p.vy = rand(-30, 10);
+        p.max = rand(0.5, 1);
+        p.size = rand(0.8, 1.6);
+      } else if (k === 'ring') {
+        p.vx = 0;
+        p.vy = 0;
+        p.max = 0.35;
+      } else if (k === 'shell') {
+        p.vy = rand(-60, -40);
+        p.max = 1.1;
+        p.size = 1;
       }
+      Object.assign(p, opts);
       this.ps.push(p);
     }
   }
@@ -131,8 +162,24 @@ export class Effects {
           p.vx *= 0.98;
           break;
         case 'dust':
+        case 'foam':
           p.vx *= 0.94;
           p.vy *= 0.94;
+          break;
+        case 'goo':
+        case 'debris':
+        case 'shell':
+          p.vy += 220 * dt;
+          if (p.floor !== undefined && p.y > p.floor) {
+            p.y = p.floor;
+            p.vy *= -0.35;
+            p.vx *= 0.6;
+            p.vr *= 0.5;
+          }
+          break;
+        case 'frost':
+          p.vx *= 0.95;
+          p.vy += 20 * dt;
           break;
         case 'smoke':
           p.vx += Math.sin(p.life * 3 + p.rot) * 4 * dt;
@@ -183,6 +230,60 @@ export class Effects {
         case 'ember': {
           ctx.fillStyle = p.k === 'spark' ? `rgba(255,230,140,${a})` : `rgba(255,140,60,${a})`;
           ctx.fillRect(p.x, p.y, 1.2, 1.2);
+          break;
+        }
+        case 'foam': {
+          ctx.fillStyle = `rgba(245,250,255,${0.75 * a})`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * (0.6 + k * 1.6), 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
+        case 'steam': {
+          ctx.fillStyle = `rgba(230,236,240,${0.32 * a})`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * (1 + k * 1.8), 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
+        case 'goo': {
+          ctx.fillStyle = rgba(p.color === '#ffffff' ? '#8adf3a' : p.color, Math.min(1, a * 1.6));
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
+        case 'debris': {
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.globalAlpha = Math.min(1, a * 2);
+          ctx.fillStyle = p.color === '#ffffff' ? '#7a6048' : p.color;
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.8);
+          ctx.restore();
+          break;
+        }
+        case 'frost': {
+          ctx.fillStyle = `rgba(200,240,255,${a})`;
+          ctx.fillRect(p.x - p.size / 2, p.y - 0.25, p.size, 0.5);
+          ctx.fillRect(p.x - 0.25, p.y - p.size / 2, 0.5, p.size);
+          break;
+        }
+        case 'ring': {
+          ctx.strokeStyle = rgba(p.color, 0.8 * a);
+          ctx.lineWidth = 1.2 * a + 0.3;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * (0.3 + k * 1.2), 0, Math.PI * 2);
+          ctx.stroke();
+          break;
+        }
+        case 'shell': {
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.fillStyle = '#d9b347';
+          ctx.fillRect(-0.9, -0.35, 1.8, 0.7);
+          ctx.restore();
           break;
         }
         case 'confetti': {

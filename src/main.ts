@@ -69,7 +69,10 @@ async function main() {
   window.addEventListener('pointerdown', () => audio.unlock(), { once: false, passive: true });
   (window as any).__done = true;
   (window as any).__app = app;
-  if (import.meta.env.DEV) (window as any).__store = store;
+  if (import.meta.env.DEV) {
+  (window as any).__store = store;
+  import('./sim/incidents').then((m) => ((window as any).__incidents = m));
+}
 }
 
 main();
