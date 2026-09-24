@@ -5,6 +5,7 @@ import * as C from './roomArtCore';
 import * as Md from './roomArtMed';
 import * as Tc from './roomArtTech';
 import * as Tr from './roomArtTrain';
+import { shaftStatic } from './elevatorArt';
 import { FLOOR_H } from './world';
 
 interface Style {
@@ -97,7 +98,7 @@ function wallLightFactor(base: string) {
 
 export function paintRoomStatic(ctx: Ctx, type: RoomType, size: number, level: number, w: number, nbL: boolean, nbR: boolean, lang: string, vault: number) {
   if (type === 'elevator') {
-    C.elevatorStatic(ctx, w);
+    shaftStatic(ctx, w);
     return;
   }
   const st = STYLES[type];

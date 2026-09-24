@@ -1,6 +1,7 @@
 /* Procedural audio: synthesized SFX + generative lounge-jazz soundtrack. No external files. */
 
-type SfxName =
+export type SfxName =
+  | 'ding'
   | 'click'
   | 'open'
   | 'close'
@@ -224,6 +225,11 @@ class AudioEngine {
     this.lastPlay[name] = now;
     const t = now;
     switch (name) {
+      case 'ding':
+        // elevator arrival chime: two soft bells
+        this.bell(NOTE(84), 0.9, 0.07);
+        this.bell(NOTE(79), 1.1, 0.06, t + 0.16);
+        break;
       case 'click':
         this.tone(1400, 0.05, { type: 'triangle', vol: 0.12 });
         this.noiseHit(0.03, { freq: 3500, vol: 0.05 });
@@ -533,4 +539,3 @@ class AudioEngine {
 }
 
 export const audio = new AudioEngine();
-export type { SfxName };

@@ -67,6 +67,11 @@ export class App {
       });
     } else this.r.setGame(g);
     this.r.hudTarget = hudTarget;
+    this.r.onSound = (name, x, y) => {
+      // world sounds only when that spot is on screen
+      const p = this.r.cam.toScreen(x, y);
+      if (p.x > -60 && p.x < this.r.cam.W + 60 && p.y > -60 && p.y < this.r.cam.H + 60 && this.r.cam.zoom > 0.45) audio.play(name);
+    };
     this.r.quality = g.s.settings.quality;
     this.applySettings();
     if (!preview) this.wire();
@@ -430,11 +435,9 @@ export class App {
       store.toast(room.type === 'elevator' || g.roomCap(room) === 0 ? t('toast_cant_assign') : d.room === -1 && g.population() >= g.capacity() ? t('toast_vault_full') : t('toast_room_full'), 'bad');
       return;
     }
+    // the dweller runs there through the corridors and elevators instead of teleporting
     const a = this.r.actors.get(d.id);
-    if (a) {
-      this.r.actors.placeInRoom(a, room, wx);
-      a.celebrate = 0.8;
-    }
+    if (a) this.r.actors.dropped(a);
     this.r.fx.emit('dust', wx, roomY(room) + 106, 6);
     this.dirty();
   }

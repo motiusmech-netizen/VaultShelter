@@ -73,7 +73,10 @@ export class Input {
     const w = this.r.cam.toWorld(x, y);
     this.r.drag = { id: d.id, wx: w.x, wy: w.y };
     const a = this.r.actors.get(d.id);
-    if (a) a.dragged = true;
+    if (a) {
+      this.r.actors.releaseLift(a);
+      a.dragged = true;
+    }
     try {
       navigator.vibrate?.(15);
     } catch { /* ignore */ }

@@ -9,10 +9,12 @@ import { Background, RAMP_X0 } from './background';
 import { Camera } from './camera';
 import { drawCharacter, drawCharacterLOD, DEFAULT_POSE, setVaultLabel } from './dwellerArt';
 import { Effects, drawHeart } from './effects';
-import { box, fillRR, glow, hazard, rgba, rrect, type Ctx } from './gfx';
+import { fillRR, glow, hazard, rgba, rrect, type Ctx } from './gfx';
 import { RoomCache, paintRoomDynamic } from './roomArt';
 import { drawVaultDoorDisc } from './vaultDoor';
-import { doorDyn, elevatorDyn } from './roomArtCore';
+import { doorDyn } from './roomArtCore';
+import { carBack, carFront, counterweight, hoist, landingFront, CAR_H } from './elevatorArt';
+import { carFeetY } from './lifts';
 import { drawBug, drawCat, drawFlames, drawMole, drawPet, drawRaider, drawRobot, drawSpikeback } from './creatures';
 import { CELL_W, FEET_Y, FLOOR_FRONT, FLOOR_H, WALL_TOP, floorY, roomW, roomX, roomY, VAULT_Y0 } from './world';
 import { iconImage } from '../ui/icons';
@@ -65,8 +67,10 @@ export class Renderer {
   robotPick = false;
   drag: { id: number; wx: number; wy: number } | null = null;
   hudTarget: (kind: string) => { x: number; y: number } | null = () => null;
-  doorAnim = 0;
   robots = new Map<number, RobotActor>();
+  /** audio hook for world sounds that should only play when on screen */
+  onSound: (name: 'door' | 'ding', x: number, y: number) => void = () => {};
+  private lastDoor = 0;
   quality = 1;
   shake = 0;
   private dpr = 1;
@@ -74,6 +78,7 @@ export class Renderer {
   constructor(public canvas: HTMLCanvasElement, public g: Game) {
     this.ctx = canvas.getContext('2d', { alpha: false })!;
     this.actors = new Actors(g);
+    this.hookActors();
     this.cache.lang = getLang();
     this.cache.vault = g.s.vault;
     setVaultLabel(g.s.vault);
@@ -82,10 +87,15 @@ export class Renderer {
   setGame(g: Game) {
     this.g = g;
     this.actors = new Actors(g);
+    this.hookActors();
     this.cache.clear();
     this.cache.vault = g.s.vault;
     setVaultLabel(g.s.vault);
     this.robots.clear();
+  }
+
+  private hookActors() {
+    this.actors.lifts.onArrive = (sh) => this.onSound('ding', sh.col * CELL_W + CELL_W / 2, carFeetY(sh.car.pos) - 30);
   }
 
   resize() {
@@ -107,19 +117,21 @@ export class Renderer {
     this.fx.quality = this.quality;
     this.fx.update(dt);
     this.updateRobots(dt);
-    this.updateDoor(dt);
+    this.updateDoor();
     this.spawnAmbientFx(dt);
     this.draw();
   }
 
-  private updateDoor(dt: number) {
-    let open = 0;
-    for (const a of this.actors.map.values()) {
-      if (a.mode === 'walk' && a.x > -70 && a.x < 40 && (a.floor <= 0)) open = 1;
-    }
-    const door = this.g.s.rooms.find((r) => r.type === 'door');
-    if (door?.incident && door.doorHp <= 0) open = 1;
-    this.doorAnim += (open - this.doorAnim) * Math.min(1, dt * (open ? 3 : 1.6));
+  /** eased vault door opening (the door logic lives in Actors) */
+  get doorAnim() {
+    const k = this.actors.doorAnim;
+    return k * k * (3 - 2 * k);
+  }
+
+  private updateDoor() {
+    const k = this.actors.doorAnim;
+    if (k > 0 && this.lastDoor === 0) this.onSound('door', 50, floorY(0) + 60);
+    this.lastDoor = k;
   }
 
   private updateRobots(dt: number) {
@@ -259,6 +271,7 @@ export class Renderer {
     this.cache.beginFrame();
     const want = Math.min(3, z * dpr * (this.quality >= 1 ? 1 : 0.7));
     for (const r of rooms) this.drawRoom(r, want);
+    this.drawShafts(v);
 
     // characters sorted
     this.drawActors(v);
@@ -352,7 +365,7 @@ export class Renderer {
     ctx.save();
     ctx.translate(x, y);
     if (r.type === 'elevator') {
-      elevatorDyn(ctx, w, r.floor + 1, this.t, this.actors.elevatorBusy(r));
+      // car, cables and landing front are drawn in drawShafts()
     } else if (r.type === 'door') {
       // light from outside when open
       if (this.doorAnim > 0.02) {
@@ -488,7 +501,6 @@ export class Renderer {
   }
 
   private drawActors(v: { l: number; r: number; t: number; b: number }) {
-    const ctx = this.ctx;
     const g = this.g;
     const lod = this.cam.zoom * this.dpr < 0.55;
     const list: { d: Dweller; a: Actor }[] = [];
@@ -496,21 +508,11 @@ export class Renderer {
       const a = this.actors.get(d.id);
       if (!a || a.mode === 'hidden' || a.dragged) continue;
       if (this.drag && this.drag.id === d.id) continue;
+      if (a.lift && (a.lift.phase === 'in' || a.lift.phase === 'board')) continue;
       if (a.x < v.l - 30 || a.x > v.r + 30 || a.y < v.t - 10 || a.y > v.b + 60) continue;
       list.push({ d, a });
     }
     list.sort((p, q) => p.a.y - q.a.y || p.a.x - q.a.x);
-    // elevator cabins behind riders
-    for (const { a } of list) {
-      if (a.mode !== 'ride') continue;
-      const cx = Math.floor(a.x / CELL_W) * CELL_W;
-      const top = a.y - FEET_Y;
-      box(ctx, cx + 6, top + 12, CELL_W - 12, FEET_Y - 8, '#3a434d', 3);
-      ctx.fillStyle = 'rgba(255,226,170,0.18)';
-      ctx.fillRect(cx + 9, top + 16, CELL_W - 18, FEET_Y - 18);
-      ctx.fillStyle = '#ffb02e';
-      ctx.fillRect(cx + 6, top + FEET_Y + 2, CELL_W - 12, 2);
-    }
     for (const { d, a } of list) {
       const r = d.room > 0 ? g.room(d.room) : undefined;
       // face enemies during incidents
@@ -538,34 +540,92 @@ export class Renderer {
         const p = this.actors.get(d.partner);
         if (p) a.dir = p.x >= a.x ? 1 : -1;
       }
-      const { pose, ko } = this.actors.pose(d, a, this.t);
-      ctx.save();
-      ctx.translate(a.x, a.y);
-      // shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.28)';
-      ctx.beginPath();
-      ctx.ellipse(0, 0, d.child ? 5 : 8, 1.8, 0, 0, Math.PI * 2);
-      ctx.fill();
-      if (ko) {
-        ctx.rotate(-Math.PI / 2);
-        ctx.translate(-4, -2);
+      this.drawDweller(d, a, lod);
+    }
+  }
+
+  /** One dweller with its shadow and pet. */
+  private drawDweller(d: Dweller, a: Actor, lod: boolean) {
+    const ctx = this.ctx;
+    const g = this.g;
+    const { pose, ko } = this.actors.pose(d, a, this.t);
+    ctx.save();
+    ctx.translate(a.x, a.y);
+    // shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, d.child ? 5 : 8, 1.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (ko) {
+      ctx.rotate(-Math.PI / 2);
+      ctx.translate(-4, -2);
+    }
+    if (pose.view === 'side' && a.dir < 0) ctx.scale(-1, 1);
+    if (lod) drawCharacterLOD(ctx, d.look, outfitOf(g, d), d.child);
+    else drawCharacter(ctx, d.look, outfitOf(g, d), pose, d.gender);
+    ctx.restore();
+    // pet follows
+    if (d.pet && !lod) {
+      const it = itemByUid(g.s, d.pet);
+      const pd = it ? PET_BY_ID[it.def] : null;
+      if (pd) {
+        ctx.save();
+        ctx.translate(a.x - a.dir * (a.mode === 'ride' ? 7 : 14), a.y);
+        if (a.dir < 0) ctx.scale(-1, 1);
+        ctx.scale(0.9, 0.9);
+        drawPet(ctx, pd.species, pd.color, pd.color2, this.t + a.seed, a.mode === 'walk');
+        ctx.restore();
       }
-      if (pose.view === 'side' && a.dir < 0) ctx.scale(-1, 1);
-      if (lod) drawCharacterLOD(ctx, d.look, outfitOf(g, d), d.child);
-      else drawCharacter(ctx, d.look, outfitOf(g, d), pose, d.gender);
+    }
+  }
+
+  /** Elevator shafts: hoist, cables, counterweights, cars with their riders, landing fronts. */
+  private drawShafts(v: { l: number; r: number; t: number; b: number }) {
+    const ctx = this.ctx;
+    const g = this.g;
+    const lod = this.cam.zoom * this.dpr < 0.55;
+    const lifts = this.actors.lifts;
+    lifts.sync();
+    for (const sh of lifts.shafts.values()) {
+      const x0 = sh.col * CELL_W;
+      if (x0 > v.r + 10 || x0 + CELL_W < v.l - 10) continue;
+      const yTop = floorY(sh.top);
+      const yBot = floorY(sh.bottom) + FLOOR_H;
+      if (yTop > v.b + 10 || yBot < v.t - 10) continue;
+      const c = sh.car;
+      const cx = x0 + CELL_W / 2;
+      const fy = carFeetY(c.pos) + (c.bump > 0 ? Math.sin(c.bump * 18) * c.bump * 0.5 : 0);
+      const carTop = fy - CAR_H - 8;
+      // counterweight travels opposite to the car
+      const span = sh.bottom - sh.top;
+      const cwPos = span > 0 ? sh.top + (sh.bottom - c.pos) : sh.top;
+      const cwTop = floorY(sh.top) + 40 + (cwPos - sh.top) * FLOOR_H * 0.85;
+      const cwX = x0 + 12.5;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x0 + 4, yTop + 9, CELL_W - 8, yBot - yTop - 9);
+      ctx.clip();
+      counterweight(ctx, cwX, cwTop);
+      hoist(ctx, x0, yTop, c.wheel, cx + 0.5, carTop, cwX, cwTop);
+      const lit = 1;
+      carBack(ctx, cx, fy, lit);
+      const riders = c.riders
+        .map((id) => ({ a: this.actors.get(id), d: g.dweller(id) }))
+        .filter((p): p is { a: Actor; d: Dweller } => !!p.a && !!p.d && !p.a.dragged && !!p.a.lift && (p.a.lift.phase === 'in' || p.a.lift.phase === 'board'))
+        .sort((p, q) => p.a.x - q.a.x);
+      for (const { d, a } of riders) this.drawDweller(d, a, lod);
+      carFront(ctx, cx, fy, c.door, c.dir, c.state === 'moving', this.t);
       ctx.restore();
-      // pet follows
-      if (d.pet && !lod) {
-        const it = itemByUid(g.s, d.pet);
-        const pd = it ? PET_BY_ID[it.def] : null;
-        if (pd) {
-          ctx.save();
-          ctx.translate(a.x - a.dir * 14, a.y);
-          if (a.dir < 0) ctx.scale(-1, 1);
-          ctx.scale(0.9, 0.9);
-          drawPet(ctx, pd.species, pd.color, pd.color2, this.t + a.seed, a.mode === 'walk');
-          ctx.restore();
-        }
+      // landing fronts over the car
+      const carFloor = Math.round(c.pos);
+      for (let f = sh.top; f <= sh.bottom; f++) {
+        const y = floorY(f);
+        if (y > v.b + 10 || y + FLOOR_H < v.t - 10) continue;
+        ctx.save();
+        ctx.translate(x0, y);
+        const here = carFloor === f && c.state !== 'moving';
+        landingFront(ctx, CELL_W, f + 1, carFloor, here, this.actors.landingCalled(sh.col, f), this.t);
+        ctx.restore();
       }
     }
   }

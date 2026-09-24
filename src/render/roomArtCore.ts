@@ -6,7 +6,7 @@ import {
   bigValve, booth, breakerPanel, cableReel, ceilingPipe, chair, chandelier, coffeeTable, curtains, doubleBed, fakeWindow, filterColumn, gunRack, jukebox, kitchenCounter, lockers, monitorBank, neonGlow, neonSign, nightstand,
   panel, pump, roundTable, rug, steamTable, stringLights, transformer, turbine, upperCabinets, wallSconce, wallVent, wardrobe,
 } from './furniture';
-import { CEIL_FRONT, FEET_Y, FLOOR_FRONT, FLOOR_H, WALL_BOTTOM, WALL_TOP } from './world';
+import { FEET_Y, FLOOR_FRONT, WALL_BOTTOM, WALL_TOP } from './world';
 
 const B = WALL_BOTTOM + 1.5;
 const M = 210;
@@ -893,87 +893,4 @@ export function doorDyn(ctx: Ctx, w: number, t: number, alarm: boolean) {
 }
 
 // ================================================================== ELEVATOR
-export function elevatorStatic(ctx: Ctx, w: number) {
-  ctx.fillStyle = '#0d1014';
-  ctx.fillRect(0, 0, w, FLOOR_H);
-  // back wall of the shaft: concrete with a steel lattice
-  ctx.fillStyle = hgrad(ctx, 4, w - 4, [
-    [0, '#1a2026'],
-    [0.5, '#2b333c'],
-    [1, '#1a2026'],
-  ]);
-  ctx.fillRect(4, 0, w - 8, FLOOR_H);
-  ctx.strokeStyle = rgba('#000', 0.45);
-  ctx.lineWidth = 1.1;
-  ctx.beginPath();
-  for (let y = -20; y < FLOOR_H + 20; y += 40) {
-    ctx.moveTo(8, y);
-    ctx.lineTo(w - 8, y + 40);
-    ctx.moveTo(w - 8, y);
-    ctx.lineTo(8, y + 40);
-  }
-  ctx.stroke();
-  // rails
-  for (const rx of [14, w - 17]) {
-    ctx.fillStyle = hgrad(ctx, rx, rx + 3, [
-      [0, '#5a646e'],
-      [0.5, '#c8d0d6'],
-      [1, '#4a525b'],
-    ]);
-    ctx.fillRect(rx, 0, 3, FLOOR_H);
-    for (let y = 8; y < FLOOR_H; y += 24) rivet(ctx, rx + 1.5, y, 0.8, '#8a939a');
-  }
-  // cables & counterweight
-  ctx.fillStyle = '#0a0c0e';
-  ctx.fillRect(w / 2 - 4, 0, 1.2, FLOOR_H);
-  ctx.fillRect(w / 2 + 3, 0, 1.2, FLOOR_H);
-  // side shells
-  for (const sx of [0, w - 4]) {
-    ctx.fillStyle = hgrad(ctx, sx, sx + 4, [
-      [0, '#20262d'],
-      [0.5, '#3b4550'],
-      [1, '#20262d'],
-    ]);
-    ctx.fillRect(sx, 0, 4, FLOOR_H);
-  }
-  // landing & slab
-  ctx.fillStyle = vgrad(ctx, FLOOR_FRONT, FLOOR_H, [
-    [0, '#3d4650'],
-    [1, '#1c2127'],
-  ]);
-  ctx.fillRect(0, FLOOR_FRONT, w, FLOOR_H - FLOOR_FRONT);
-  hazard(ctx, 4, FLOOR_FRONT - 1, w - 8, 2.4, '#f2b632', '#26282b', 3);
-  ctx.fillStyle = '#2a323b';
-  ctx.fillRect(0, 0, w, CEIL_FRONT);
-  // landing door frame
-  ctx.strokeStyle = rgba('#9aa7b0', 0.5);
-  ctx.lineWidth = 1.2;
-  ctx.strokeRect(8, 28, w - 16, FLOOR_FRONT - 29);
-  // floor indicator lamp housing + call panel
-  panel(ctx, w - 13, 58, 6, 11, '#3a424b', 1);
-  // work light
-  fillRR(ctx, w / 2 - 6, CEIL_FRONT + 1, 12, 3, 1, '#3a424b');
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  glow(ctx, w / 2, CEIL_FRONT + 4, 30, '#ffe2b0', 0.18);
-  ctx.restore();
-}
-
-export function elevatorDyn(ctx: Ctx, w: number, floorNo: number, t: number, busy: boolean) {
-  panel(ctx, w / 2 - 8, 16, 16, 9, '#1b2025', 1.5);
-  ctx.font = '700 6px Oswald, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#ffb02e';
-  ctx.fillText(String(floorNo), w / 2, 20.8);
-  ctx.fillStyle = busy && Math.sin(t * 8) > 0 ? '#6aff8c' : '#2a4a32';
-  ctx.beginPath();
-  ctx.arc(w - 10, 62, 1.2, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#e84a3c';
-  ctx.beginPath();
-  ctx.arc(w - 10, 66, 1.2, 0, Math.PI * 2);
-  ctx.fill();
-}
-
 export { FEET_Y, pipeV, pipeH, box, fillRR };
