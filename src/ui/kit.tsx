@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'preact/hooks';
 import { iconSvg } from './icons';
 import { audio } from '../audio/audio';
 import { drawCharacter, DEFAULT_POSE, drawWeapon, dnaOf } from '../render/dwellerArt';
+import { weaponProfile } from '../render/weaponArt';
 import type { Dweller, Item } from '../sim/types';
 import { app } from '../app';
 import { outfitOf } from '../render/actors';
@@ -197,9 +198,12 @@ export function drawItemPic(ctx: CanvasRenderingContext2D, it: Item, w: number, 
   if (it.kind === 'weapon') {
     const wd = WEAPON_BY_ID[it.def];
     if (!wd) return;
+    // frame the weapon by its real length
+    const [a, b] = weaponProfile(wd).span;
+    const sc = Math.min((w * 0.84) / (b - a), (h * 0.9) / 12, 3.2 * (w / 58));
     ctx.save();
-    ctx.translate(w / 2 - 12 * (w / 58), h / 2 + 2);
-    ctx.scale(2.2 * (w / 58), 2.2 * (w / 58));
+    ctx.translate(w / 2 - ((a + b) / 2) * sc, h / 2 + 1.5 * sc);
+    ctx.scale(sc, sc);
     drawWeapon(ctx, wd, 0, 0, false);
     ctx.restore();
   } else if (it.kind === 'outfit') {

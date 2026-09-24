@@ -679,6 +679,16 @@ export class Renderer {
         if (img) ctx.drawImage(img, head.x - 9, head.y - 14, 18, 18);
       }
       if (a.bubbleT > 0 && a.bubble && z > 0.45) this.speech(ctx, head.x, head.y - 8, a.bubble, Math.min(1, a.bubbleT * 2));
+      // health bar while fighting
+      if (a.cmb && z > 0.5 && !d.ko) {
+        const bw = 28;
+        const p = this.cam.toScreen(a.x, a.y + 4);
+        const k = clamp(d.hp / Math.max(1, d.maxHp), 0, 1);
+        ctx.fillStyle = 'rgba(0,0,0,0.65)';
+        ctx.fillRect(p.x - bw / 2 - 1, p.y - 1, bw + 2, 6);
+        ctx.fillStyle = k > 0.5 ? '#5ee27f' : k > 0.25 ? '#ffcf4a' : '#ff5a4e';
+        ctx.fillRect(p.x - bw / 2, p.y, bw * k, 4);
+      }
       // training progress
       const r = d.room > 0 ? g.room(d.room) : undefined;
       if (r && ROOMS[r.type].category === 'train' && z > 0.7 && a.mode === 'idle' && !d.child) {
