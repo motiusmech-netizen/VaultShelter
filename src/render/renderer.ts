@@ -234,7 +234,7 @@ export class Renderer {
     ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * (cam.W / 2 - cam.x * z + sx), dpr * (cam.H / 2 - cam.y * z + sy));
     const v = cam.viewRect();
     if (v.t < 20) this.bg.drawLandscape(ctx, cam.x, st, v.l, v.r);
-    this.bg.drawGround(ctx, st, v.l, v.r, v.t, v.b);
+    this.bg.drawGround(ctx, st, v.l, v.r, v.t, v.b, Math.min(3, z * dpr * (this.quality >= 1 ? 1 : 0.7)));
 
     // visible rooms
     const rooms = g.s.rooms.filter((r) => {

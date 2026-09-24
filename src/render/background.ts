@@ -1,8 +1,10 @@
 /* Sky, surface, parallax landscape, underground strata and rock formations. */
 import { hash2, mulberry32, clamp } from '../core/util';
-import { box, fillRR, glow, hazard, hgrad, makeCanvas, mix, rgba, rgrad, shade, vgrad, type Ctx, grit } from './gfx';
+import { box, fillRR, glow, hgrad, makeCanvas, mix, rgba, rgrad, shade, vgrad, type Ctx, grit } from './gfx';
 import { FLOOR_H, VAULT_Y0, WORLD_H, WORLD_W, CELL_W, FEET_Y } from './world';
 import type { Rock } from '../sim/types';
+import { GroundTiles, TILE, groundPath, setCanyonY } from './underground';
+import { apron, bunkerPortal, gasStation, lampPost, litFn, mailbox, periscope, powerPoles, rocketDiner, roadSign, ruinedHouse, sandbags, satelliteDish, skull, tirePile, ventStack, waterTower, welcomeSign } from './surface';
 
 export const RAMP_X0 = -560; // spawn / exit point on the canyon floor
 export const APRON_Y = VAULT_Y0 + FEET_Y; // feet level outside the door
@@ -86,7 +88,8 @@ function buildMesa() {
   ctx.moveTo(0, H);
   let x = 0;
   let y = H * 0.55;
-  while (x < W) {
+  ctx.lineTo(0, y);
+  while (x < W - 240) {
     const flat = rnd() < 0.5;
     const nx = x + 60 + rnd() * 160;
     const ny = flat ? y : H * (0.25 + rnd() * 0.5);
@@ -97,6 +100,9 @@ function buildMesa() {
     x = nx;
     y = ny;
   }
+  // return to the starting height so the strip tiles seamlessly
+  ctx.lineTo(W - 80, H * 0.55);
+  ctx.lineTo(W, H * 0.55);
   ctx.lineTo(W, H);
   ctx.closePath();
   ctx.fillStyle = '#ffffff';
@@ -133,6 +139,82 @@ function buildCity() {
     ctx.fillRect(rnd() * W, H * 0.25 + rnd() * H * 0.7, 3, 3);
   }
   cityCanvas = c;
+}
+
+let canyonWall: HTMLCanvasElement | null = null;
+/** Far canyon wall: stratified cliff with ledges and cracks; tiles horizontally. */
+function buildCanyonWall() {
+  const W = 1200;
+  const H = 230;
+  const [c, ctx] = makeCanvas(W * 2, H * 2);
+  ctx.scale(2, 2);
+  const rnd = mulberry32(77);
+  // silhouette with mesa-like steps; starts and ends at the same height
+  const pts: [number, number][] = [[0, 40]];
+  let x = 0;
+  while (x < W - 120) {
+    x += 40 + rnd() * 110;
+    const y = 10 + rnd() * 60;
+    pts.push([x - 12, pts[pts.length - 1][1]]);
+    pts.push([x, y]);
+  }
+  pts.push([W - 40, 40]);
+  pts.push([W, 40]);
+  const path = () => {
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    for (const [px, py] of pts) ctx.lineTo(px, py);
+    ctx.lineTo(W, H);
+    ctx.closePath();
+  };
+  path();
+  ctx.fillStyle = vgrad(ctx, 0, H, [
+    [0, '#b98a62'],
+    [0.35, '#9a6a48'],
+    [0.7, '#7a4e34'],
+    [1, '#5a3824'],
+  ]);
+  ctx.fill();
+  ctx.save();
+  path();
+  ctx.clip();
+  // strata bands
+  for (let i = 0; i < 9; i++) {
+    const by = 40 + i * 20 + rnd() * 8;
+    ctx.fillStyle = i % 2 ? 'rgba(255,230,190,0.1)' : 'rgba(60,30,16,0.14)';
+    ctx.beginPath();
+    ctx.moveTo(0, by);
+    for (let xx = 0; xx <= W; xx += 30) ctx.lineTo(xx, by + Math.sin(xx * 0.01 + i) * 3);
+    for (let xx = W; xx >= 0; xx -= 30) ctx.lineTo(xx, by + 8 + Math.sin(xx * 0.012 + i * 2) * 3);
+    ctx.fill();
+  }
+  // vertical erosion cracks and shadows under ledges
+  for (let i = 0; i < 60; i++) {
+    const cx = rnd() * W;
+    const cy = 30 + rnd() * 140;
+    ctx.strokeStyle = 'rgba(50,24,12,0.35)';
+    ctx.lineWidth = 0.8 + rnd();
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + (rnd() - 0.5) * 6, cy + 16 + rnd() * 40);
+    ctx.stroke();
+  }
+  for (let i = 1; i < pts.length; i += 2) {
+    const [px, py] = pts[i];
+    ctx.fillStyle = vgrad(ctx, py, py + 30, [
+      [0, 'rgba(40,20,10,0.35)'],
+      [1, 'rgba(40,20,10,0)'],
+    ]);
+    ctx.fillRect(px - 12, py, 40, 30);
+  }
+  ctx.restore();
+  // sunlit rim on the top edge
+  ctx.strokeStyle = 'rgba(255,225,180,0.55)';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  pts.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+  ctx.stroke();
+  canyonWall = c;
 }
 
 function buildClouds() {
@@ -233,9 +315,11 @@ export function rockTexture(): HTMLCanvasElement {
 // ---------------------------------------------------------------- draw functions
 export class Background {
   private rockCache = new Map<number, { canvas: HTMLCanvasElement; x: number; y: number }>();
+  tiles = new GroundTiles();
 
   constructor() {
     buildMesa();
+    buildCanyonWall();
     buildCity();
     buildClouds();
   }
@@ -348,53 +432,58 @@ export class Background {
   }
 
   /** The ground mass: canyon floor on the left, cliff with the vault door, plateau above the vault. */
-  drawGround(ctx: Ctx, st: SurfaceState, viewL: number, viewR: number, viewT: number, viewB: number) {
+  drawGround(ctx: Ctx, st: SurfaceState, viewL: number, viewR: number, viewT: number, viewB: number, pxScale = 1) {
     const light = daylight(st.dayPhase);
     const green = clamp((st.dawn - 2) / 3, 0, 1);
     const L = Math.max(SURFACE_L, viewL - 50);
     const R = Math.min(SURFACE_R, viewR + 50);
     const CY = APRON_Y + 5; // canyon ground level
     // far canyon wall fill between the horizon layers and the canyon floor (left side only)
-    if (L < 0) {
-      const wall = mix(mix('#8a6446', '#6a7a5a', green * 0.7), '#16141a', 1 - light * 0.9);
-      ctx.fillStyle = vgrad(ctx, -40, CY, [
-        [0, rgba(wall, 0)],
-        [0.25, wall],
-        [1, shade(wall, -0.25)],
+    if (L < 0 && canyonWall) {
+      const wallW = 1200;
+      const top = -70;
+      const h = CY - top + 4;
+      const night = tinted(canyonWall, '#161420', tintCache);
+      const green = clamp((st.dawn - 2) / 3, 0, 1);
+      for (let x = Math.floor(L / wallW) * wallW; x < Math.min(0, R); x += wallW) {
+        ctx.drawImage(canyonWall, x, top, wallW, h);
+        if (green > 0.01) {
+          ctx.globalAlpha = green * 0.35;
+          ctx.drawImage(tinted(canyonWall, '#6a8a4a', tintCache), x, top, wallW, h);
+        }
+        ctx.globalAlpha = (1 - light) * 0.82;
+        ctx.drawImage(night, x, top, wallW, h);
+        ctx.globalAlpha = 1;
+      }
+      // dust haze in front of the far wall
+      ctx.fillStyle = vgrad(ctx, top, CY, [
+        [0, rgba(mix('#d9a877', '#2a2a40', 1 - light), 0.25 * (1 - green))],
+        [1, rgba(mix('#d9a877', '#2a2a40', 1 - light), 0.05)],
       ]);
-      ctx.fillRect(L, -40, Math.min(0, R) - L, CY + 40);
-      // distant rock pillars in the canyon
-      for (let i = Math.floor(L / 260); i <= 0; i++) {
-        const px = i * 260 + hash2(i, 31) * 120;
-        if (px > -80) continue;
-        const ph = 60 + hash2(i, 33) * 70;
-        ctx.fillStyle = shade(wall, -0.1 - hash2(i, 35) * 0.12);
-        ctx.beginPath();
-        ctx.moveTo(px - 30, CY);
-        ctx.lineTo(px - 22, CY - ph);
-        ctx.lineTo(px + 18, CY - ph - 6);
-        ctx.lineTo(px + 28, CY);
-        ctx.fill();
+      ctx.fillRect(L, top, -L, CY - top);
+    }
+    // underground mass: cached cross-section tiles
+    setCanyonY(CY);
+    this.tiles.lang = this.lang;
+    this.tiles.begin();
+    const gB = Math.min(viewB, WORLD_H + 400);
+    const tx0 = Math.floor(L / TILE);
+    const tx1 = Math.floor(R / TILE);
+    const ty0 = Math.max(0, Math.floor(viewT / TILE));
+    const ty1 = Math.floor(gB / TILE);
+    for (let ty = ty0; ty <= ty1; ty++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        const e = this.tiles.get(tx, ty, pxScale);
+        if (e) ctx.drawImage(e.canvas, tx * TILE, ty * TILE, TILE + 0.5, TILE + 0.5);
+        else if (ty > 0) {
+          ctx.fillStyle = '#6a4a38';
+          ctx.fillRect(tx * TILE, ty * TILE, TILE + 0.5, TILE + 0.5);
+        }
       }
     }
-    // underground mass
     ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(L, CY);
-    ctx.lineTo(-8, CY);
-    // cliff face (slight overhang)
-    ctx.bezierCurveTo(-4, CY - 40, -18, VAULT_Y0 + 10, -24, VAULT_Y0 - 6);
-    ctx.bezierCurveTo(-34, 20, -40, 6, -34, 0);
-    ctx.lineTo(R, 0);
-    ctx.lineTo(R, WORLD_H + 400);
-    ctx.lineTo(L, WORLD_H + 400);
-    ctx.closePath();
+    groundPath(ctx, L, R, WORLD_H + 400);
     ctx.clip();
-    const tex = rockTexture();
-    if (!rockPattern) rockPattern = ctx.createPattern(tex, 'repeat');
-    ctx.fillStyle = rockPattern!;
-    ctx.fillRect(L, 0, R - L, Math.min(viewB, WORLD_H + 400));
-    this.drawStrata(ctx, L, R, Math.max(0, viewT), Math.min(viewB, WORLD_H + 400));
     // topsoil on the plateau
     ctx.fillStyle = vgrad(ctx, 0, 40, [
       [0, mix(mix('#8a6a45', '#5a7a3a', green), '#2a2420', 1 - light * 0.6)],
@@ -416,109 +505,23 @@ export class Background {
     ctx.fillRect(-50, 0, 70, CY);
     ctx.restore();
 
-    // concrete portal around the door opening
-    const pm = mix('#9aa0a6', '#2e3136', 1 - light * 0.9);
-    box(ctx, -34, VAULT_Y0 + 2, 30, 8, pm, 2);
-    box(ctx, -30, VAULT_Y0 + 10, 8, CY - VAULT_Y0 - 10, shade(pm, -0.08), 1.5);
-    hazard(ctx, -30, VAULT_Y0 + 10, 8, 26, '#f2b632', '#26282b', 4);
-    // warning light over the door
-    const blink = Math.sin(performance.now() / 350) > 0;
-    ctx.fillStyle = blink ? '#ffb02e' : '#6a4a10';
-    ctx.beginPath();
-    ctx.arc(-19, VAULT_Y0 - 2, 3, 0, Math.PI * 2);
-    ctx.fill();
-    if (blink && light < 0.7) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      glow(ctx, -19, VAULT_Y0 - 2, 40, '#ffb02e', 0.35);
-      ctx.restore();
-    }
-    // apron concrete + lamp posts
-    fillRR(ctx, -190, CY - 3, 184, 6, 1.5, mix('#a9a59c', '#34332f', 1 - light));
-    ctx.fillStyle = rgba('#f2b632', 0.7);
-    for (let x = -186; x < -12; x += 16) ctx.fillRect(x, CY - 3, 8, 1.2);
-    for (const lx of [-176, -96]) {
-      ctx.fillStyle = mix('#3a3d44', '#141518', 1 - light);
-      ctx.fillRect(lx - 1, CY - 50, 2, 48);
-      box(ctx, lx - 5, CY - 54, 10, 4, '#3a3f45', 1);
-      if (light < 0.65) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        glow(ctx, lx, CY - 48, 70, '#ffcf8a', 0.4 * (1 - light));
-        ctx.restore();
-      }
-    }
-    // welcome sign on the canyon floor
-    const sx = -250;
-    ctx.fillStyle = mix('#5a4a3a', '#141210', 1 - light);
-    ctx.fillRect(sx - 1, CY - 40, 2.4, 40);
-    box(ctx, sx - 34, CY - 58, 68, 22, mix('#e8dcc0', '#2a2622', 1 - light), 2);
-    ctx.font = '700 8px Oswald, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = mix('#2a1a0a', '#0a0806', 1 - light);
-    ctx.fillText(this.signText(), sx, CY - 47);
-
+    const lit = litFn(light);
     this.drawSurfaceDetails(ctx, st, L, R);
+    // bunker entrance built into the cliff, apron, lamps and the welcome area
+    bunkerPortal(ctx, lit, VAULT_Y0, CY, light, st.time, this.lang);
+    apron(ctx, lit, -200, -4, CY, light, this.lang);
+    for (const lx of [-186, -106]) lampPost(ctx, lit, lx, CY - 1, light, st.time);
+    sandbags(ctx, lit, -236, CY + 1, 3);
+    mailbox(ctx, lit, -150, CY - 1, this.lang, st.time);
+    welcomeSign(ctx, lit, -420, CY, light, st.time, this.lang);
+    roadSign(ctx, lit, -548, CY, this.lang);
+    tirePile(ctx, lit, -600, CY);
+    gasStation(ctx, lit, -760, CY, this.lang, st.time);
+
   }
 
   lang = 'ru';
   signText = () => (this.lang === 'ru' ? 'УБЕЖИЩЕ →' : 'SHELTER →');
-
-  private drawStrata(ctx: Ctx, L: number, R: number, T: number, Bt: number) {
-    const bands = [
-      { y: 40, h: 90, c: '#7a5a3e', a: 0.25 },
-      { y: 330, h: 60, c: '#3a2a22', a: 0.25 },
-      { y: 620, h: 140, c: '#6a5a4a', a: 0.2 },
-      { y: 980, h: 80, c: '#2a2020', a: 0.3 },
-      { y: 1300, h: 200, c: '#5a3a2e', a: 0.25 },
-      { y: 1750, h: 120, c: '#3a3036', a: 0.3 },
-      { y: 2200, h: 260, c: '#4a2a22', a: 0.3 },
-      { y: 2700, h: 200, c: '#2a2228', a: 0.35 },
-    ];
-    for (const b of bands) {
-      if (b.y + b.h < T || b.y > Bt) continue;
-      ctx.beginPath();
-      ctx.moveTo(L, b.y);
-      for (let x = L; x <= R; x += 80) ctx.lineTo(x, b.y + Math.sin(x * 0.004 + b.y) * 14 + Math.sin(x * 0.013) * 5);
-      for (let x = R; x >= L; x -= 80) ctx.lineTo(x, b.y + b.h + Math.sin(x * 0.005 + b.h) * 16);
-      ctx.closePath();
-      ctx.fillStyle = rgba(b.c, b.a);
-      ctx.fill();
-    }
-    // depth darkening
-    ctx.fillStyle = vgrad(ctx, 0, WORLD_H + 400, [
-      [0, 'rgba(0,0,0,0)'],
-      [0.5, 'rgba(8,4,6,0.28)'],
-      [1, 'rgba(10,4,8,0.55)'],
-    ]);
-    ctx.fillRect(L, T, R - L, Bt - T);
-    // warm deep glow near the bottom (magma hint)
-    if (Bt > WORLD_H - 400) {
-      ctx.fillStyle = vgrad(ctx, WORLD_H - 300, WORLD_H + 400, [
-        [0, 'rgba(255,90,30,0)'],
-        [1, 'rgba(255,90,30,0.18)'],
-      ]);
-      ctx.fillRect(L, WORLD_H - 300, R - L, 700);
-    }
-    // crystals & fossils scattered (deterministic)
-    const cellS = 260;
-    const x0 = Math.floor(L / cellS);
-    const x1 = Math.ceil(R / cellS);
-    const y0 = Math.max(1, Math.floor(T / cellS));
-    const y1 = Math.ceil(Bt / cellS);
-    for (let gx = x0; gx <= x1; gx++) {
-      for (let gy = y0; gy <= y1; gy++) {
-        const h = hash2(gx, gy, 77);
-        const px = gx * cellS + hash2(gx, gy, 3) * cellS;
-        const py = gy * cellS + hash2(gx, gy, 5) * cellS;
-        if (h < 0.18 && py > 700) crystal(ctx, px, py, 6 + hash2(gx, gy, 9) * 10, py > 1800 ? '#ff7a5a' : '#6ad8ff');
-        else if (h < 0.26) fossil(ctx, px, py, 8 + hash2(gx, gy, 11) * 6);
-        else if (h < 0.3 && py < 500) roots(ctx, px, 0, 60 + hash2(gx, gy, 13) * 60);
-        else if (h < 0.34) oldPipe(ctx, px, py);
-      }
-    }
-  }
 
   private drawSurfaceDetails(ctx: Ctx, st: SurfaceState, L: number, R: number) {
     const light = daylight(st.dayPhase);
@@ -556,7 +559,8 @@ export class Background {
     for (let gx = Math.floor(L / step); gx <= Math.ceil(R / step); gx++) {
       const x = gx * step + hash2(gx, 2) * 80;
       const canyon = x < -20;
-      if (x > -330 && x < 440) continue; // keep the entrance and the hill clean
+      if (x > -800 && x < 440) continue; // keep the entrance, canyon set and the hill clean
+      if ((x > 1040 && x < 1290) || (x > 1360 && x < 1560) || (x > 1700 && x < 1780)) continue;
       const y = canyon ? CY : 0;
       const h = hash2(gx, 7);
       if (dawn >= 3 && h < 0.35) tree(ctx, x, y, 30 + hash2(gx, 8) * 40, light, dawn >= 4);
@@ -584,8 +588,19 @@ export class Background {
       }
       ctx.restore();
     }
-    // billboard to the right of the vault
+    // plateau landmarks
+    const lit = litFn(light);
+    ventStack(ctx, lit, 470, 0, 34, st.time);
+    ventStack(ctx, lit, 760, 0, 26, st.time + 3);
+    periscope(ctx, lit, 620, 0, st.time);
     billboard(ctx, 900, 0, light, st, this.lang);
+    waterTower(ctx, lit, 1160, 0, this.lang);
+    ruinedHouse(ctx, lit, 1380, 0);
+    rocketDiner(ctx, lit, 1740, 0, light, this.lang);
+    powerPoles(ctx, lit, 1830, 2260, 0, 90);
+    satelliteDish(ctx, lit, 2060, 0, st.time);
+    skull(ctx, lit, -520, CY, 1.2);
+    skull(ctx, lit, 1300, 0, 1);
     // pond (stage 2+)
     if (dawn >= 2) pond(ctx, 1500, 0, light, st.time);
     // birds (stage 4+)
@@ -664,12 +679,44 @@ export class Background {
     ctx.fill();
   }
 
-  /** Dark carved halo around excavated rooms. */
+  /** Reinforced concrete casing around the vault rooms, with a soft shadow in the soil. */
   drawExcavation(ctx: Ctx, rects: { x: number; y: number; w: number; h: number }[]) {
-    ctx.fillStyle = 'rgba(12,8,6,0.35)';
-    for (const r of rects) ctx.fillRect(r.x - 7, r.y - 6, r.w + 14, r.h + 12);
-    ctx.fillStyle = 'rgba(12,8,6,0.45)';
-    for (const r of rects) ctx.fillRect(r.x - 3, r.y - 3, r.w + 6, r.h + 6);
+    for (const [pad, a] of [
+      [22, 0.08],
+      [15, 0.12],
+      [10, 0.16],
+    ] as const) {
+      const c = rgba('#0a0604', a);
+      for (const r of rects) fillRR(ctx, r.x - pad, r.y - pad * 0.7, r.w + pad * 2, r.h + pad * 1.4, pad, c);
+    }
+    const P = 6;
+    for (const r of rects) {
+      ctx.fillStyle = vgrad(ctx, r.y - P, r.y + r.h + P, [
+        [0, '#8a8c8e'],
+        [0.05, '#6a6c6f'],
+        [0.5, '#5d5f62'],
+        [0.95, '#505255'],
+        [1, '#35373a'],
+      ]);
+      ctx.fillRect(r.x - P, r.y - P, r.w + P * 2, r.h + P * 2);
+    }
+    // form-work seams, tie holes and a light lip along the top edge
+    for (const r of rects) {
+      ctx.fillStyle = rgba('#000', 0.35);
+      for (let x = r.x; x <= r.x + r.w + 0.1; x += CELL_W) {
+        ctx.fillRect(x - 0.4, r.y - P, 0.8, P);
+        ctx.fillRect(x - 0.4, r.y + r.h, 0.8, P);
+      }
+      ctx.fillStyle = rgba('#1a1c1e', 0.8);
+      for (let x = r.x + CELL_W / 2; x < r.x + r.w; x += CELL_W) {
+        ctx.beginPath();
+        ctx.arc(x, r.y - P / 2, 0.8, 0, Math.PI * 2);
+        ctx.arc(x, r.y + r.h + P / 2, 0.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = rgba('#ffffff', 0.18);
+      ctx.fillRect(r.x - P, r.y - P, r.w + P * 2, 0.8);
+    }
   }
 
   rockCanvas(rk: Rock) {
@@ -737,56 +784,6 @@ export class Background {
 }
 
 // ---------------------------------------------------------------- small decorations
-function crystal(ctx: Ctx, x: number, y: number, s: number, c: string) {
-  for (let i = 0; i < 3; i++) {
-    ctx.save();
-    ctx.translate(x + (i - 1) * s * 0.4, y);
-    ctx.rotate((i - 1) * 0.4);
-    ctx.beginPath();
-    ctx.moveTo(0, -s * (1 - i * 0.2));
-    ctx.lineTo(s * 0.25, 0);
-    ctx.lineTo(0, s * 0.2);
-    ctx.lineTo(-s * 0.25, 0);
-    ctx.closePath();
-    ctx.fillStyle = hgrad(ctx, -s * 0.25, s * 0.25, [
-      [0, shade(c, 0.4)],
-      [1, shade(c, -0.3)],
-    ]);
-    ctx.globalAlpha = 0.75;
-    ctx.fill();
-    ctx.restore();
-  }
-  ctx.globalAlpha = 1;
-}
-function fossil(ctx: Ctx, x: number, y: number, s: number) {
-  ctx.strokeStyle = 'rgba(220,200,170,0.28)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  for (let a = 0; a < Math.PI * 5; a += 0.3) {
-    const r = (a / (Math.PI * 5)) * s;
-    const px = x + Math.cos(a) * r;
-    const py = y + Math.sin(a) * r;
-    if (a === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
-  }
-  ctx.stroke();
-}
-function roots(ctx: Ctx, x: number, y: number, len: number) {
-  ctx.strokeStyle = 'rgba(60,40,26,0.55)';
-  ctx.lineWidth = 1.2;
-  for (let i = 0; i < 3; i++) {
-    ctx.beginPath();
-    ctx.moveTo(x + i * 6, y + 4);
-    ctx.bezierCurveTo(x + i * 6 - 10, y + len * 0.3, x + i * 6 + 12, y + len * 0.6, x + i * 6 - 4, y + len);
-    ctx.stroke();
-  }
-}
-function oldPipe(ctx: Ctx, x: number, y: number) {
-  ctx.fillStyle = 'rgba(80,70,62,0.5)';
-  ctx.fillRect(x, y, 60, 5);
-  ctx.fillStyle = 'rgba(160,110,70,0.35)';
-  ctx.fillRect(x + 10, y + 1, 8, 3);
-}
 function deadTree(ctx: Ctx, x: number, y: number, h: number, light: number) {
   ctx.strokeStyle = mix('#4a3626', '#141210', 1 - light);
   ctx.lineCap = 'round';
