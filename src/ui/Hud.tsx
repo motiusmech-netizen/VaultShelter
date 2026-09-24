@@ -26,9 +26,14 @@ function Gauge({ k, icon, color }: { k: ResKey; icon: string; color: string }) {
         store.toast(`${t(('res_' + k) as any)}: ${fmtInt(v)} / ${fmtInt(cap)} · −${(prod * 60).toFixed(1)}/${t('min')}`, 'info', icon);
       }}
     >
-      <Icon n={icon} />
+      <div class="bezel">
+        <Icon n={icon} />
+      </div>
       <div class="track">
-        <div class="fill" style={{ width: `${Math.max(2, frac * 100)}%`, background: `linear-gradient(90deg, ${color}aa, ${color})` }} />
+        <div
+          class="fill"
+          style={{ width: `${Math.max(2, frac * 100)}%`, background: `linear-gradient(180deg, ${color} 0%, ${color}cc 55%, ${color}88 100%)`, '--gc': `${color}66` } as any}
+        />
       </div>
       <span class="val">{fmtShort(v)}</span>
     </div>

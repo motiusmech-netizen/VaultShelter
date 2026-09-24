@@ -71,10 +71,18 @@ export class App {
     this.applySettings();
     if (!preview) this.wire();
     // start camera at the vault entrance
-    this.r.cam.zoom = Math.max(this.r.cam.minZoom, Math.min(1.25, this.r.cam.W / 620));
+    this.r.cam.zoom = this.defaultZoom();
     this.r.cam.x = 170;
     this.r.cam.y = 110;
     this.r.cam.clampPos();
+  }
+
+  /** Comfortable zoom: about one room wide in portrait, four to five rooms on desktop. */
+  defaultZoom() {
+    const cam = this.r.cam;
+    const portrait = cam.H > cam.W;
+    const z = portrait ? cam.W / 300 : Math.min(cam.W / 620, cam.H / 420);
+    return Math.max(cam.minZoom, Math.min(1.7, z));
   }
 
   applySettings() {

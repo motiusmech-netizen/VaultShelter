@@ -103,7 +103,7 @@ export function Sheet(props: { title: ComponentChildren; sub?: ComponentChildren
     <div class="sheet-wrap">
       <div class={'sheet' + (props.compact ? ' compact' : '')} onPointerDown={(e) => e.stopPropagation()}>
         <div class="sheet-head">
-          {props.accent && <div class="accent" style={{ background: props.accent }} />}
+          {props.accent && <div class="accent" style={{ background: props.accent, color: props.accent }} />}
           {props.icon && <Icon n={props.icon} cls="lg" />}
           <h2>
             {props.title}
