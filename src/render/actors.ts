@@ -74,6 +74,46 @@ const WORK: Partial<Record<RoomType, WorkStyle>> = {
   door: 'guard',
 };
 
+/** Varied standing poses so idle dwellers never look like mannequins. */
+function idlePose(pose: Pose, t: number, seed: number) {
+  const span = 7;
+  const tt = t + seed * 5.3;
+  const k = Math.floor(tt / span);
+  const local = tt - k * span;
+  const v = Math.floor(((Math.sin(k * 12.9898 + seed * 78.233) * 43758.5453) % 1 + 1) * 6) % 6;
+  pose.bob = Math.sin(t * 2 + seed) * 0.3;
+  pose.armA = 0.1 + Math.sin(t * 0.7 + seed) * 0.03;
+  pose.armB = 0.1;
+  switch (v) {
+    case 2:
+      pose.armA = pose.armB = 0.62;
+      pose.elbowA = pose.elbowB = 1.9;
+      break;
+    case 3:
+      pose.armA = 0.12;
+      pose.armB = 2.75;
+      pose.elbowB = -1.5 + Math.sin(t * 14) * 0.18;
+      pose.eyes = local > 3 ? 'open' : pose.eyes;
+      pose.lookDir = -0.6;
+      break;
+    case 4:
+      pose.armA = pose.armB = 0.35;
+      pose.elbowA = pose.elbowB = 3.0;
+      pose.legB = 0.1;
+      break;
+    case 5:
+      if (local < 2.4) {
+        const k2 = Math.sin((local / 2.4) * Math.PI);
+        pose.armA = pose.armB = 0.1 + k2 * 2.7;
+        pose.elbowA = pose.elbowB = -0.6 * k2;
+        pose.mouth = 'open';
+        pose.eyes = 'closed';
+        pose.bob += k2 * 0.8;
+      }
+      break;
+  }
+}
+
 export function outfitOf(g: Game, d: Dweller): OutfitDef {
   const it = itemByUid(g.s, d.outfit);
   return (it && OUTFIT_BY_ID[it.def]) || VAULT_SUIT;
@@ -561,21 +601,42 @@ export class Actors {
       const ph = t + a.seed;
       switch (style) {
         case 'arms': {
+          // work the machine with the back to the camera, turning around now and then
           const s1 = Math.sin(ph * 3);
-          pose.armA = 0.35 + s1 * 0.35;
-          pose.armB = 0.35 - s1 * 0.35;
-          pose.elbowA = 1.3 + s1 * 0.5;
-          pose.elbowB = 1.3 - s1 * 0.5;
-          pose.bob = Math.abs(s1) * 0.5;
+          if (Math.sin(ph * 0.31 + a.seed) > -0.35) {
+            pose.view = 'back';
+            pose.reach = true;
+            pose.armA = 0.62 + s1 * 0.28;
+            pose.armB = 0.62 - s1 * 0.28;
+            pose.elbowA = pose.elbowB = 2.3;
+            pose.bob = Math.abs(s1) * 0.4;
+            pose.lean = s1 * 0.025;
+          } else {
+            pose.armA = 0.35 + s1 * 0.3;
+            pose.armB = 0.35 - s1 * 0.3;
+            pose.elbowA = 1.4 + s1 * 0.5;
+            pose.elbowB = 1.4 - s1 * 0.5;
+            pose.bob = Math.abs(s1) * 0.5;
+          }
           pose.mouth = d.happy > 60 ? 'happy' : 'neutral';
           break;
         }
         case 'type':
-          pose.armA = 0.28 + Math.sin(ph * 12) * 0.04;
-          pose.armB = 0.28 - Math.sin(ph * 12) * 0.04;
-          pose.elbowA = 1.75 + Math.sin(ph * 13) * 0.08;
-          pose.elbowB = 1.75 - Math.sin(ph * 11) * 0.08;
-          pose.lookDir = 0;
+          if (Math.sin(ph * 0.27 + a.seed * 3) > -0.45) {
+            // at the console, back to the camera
+            pose.view = 'back';
+            pose.reach = true;
+            pose.armA = 0.42 + Math.sin(ph * 12) * 0.05;
+            pose.armB = 0.42 - Math.sin(ph * 11) * 0.05;
+            pose.elbowA = pose.elbowB = 2.4;
+            pose.bob = Math.max(0, Math.sin(ph * 12)) * 0.15;
+          } else {
+            pose.armA = 0.28 + Math.sin(ph * 12) * 0.04;
+            pose.armB = 0.28 - Math.sin(ph * 12) * 0.04;
+            pose.elbowA = 1.75 + Math.sin(ph * 13) * 0.08;
+            pose.elbowB = 1.75 - Math.sin(ph * 11) * 0.08;
+            pose.lookDir = 0;
+          }
           break;
         case 'lift': {
           const c = (Math.sin(ph * 2.4) + 1) / 2;
@@ -660,13 +721,11 @@ export class Actors {
           pose.hold = 'tray';
           break;
         default:
-          pose.bob = Math.sin(ph * 2) * 0.3;
-          pose.armA = 0.1 + Math.sin(ph * 0.7) * 0.03;
-          pose.armB = 0.1;
+          idlePose(pose, t, a.seed);
       }
       return { pose, ko: false, style };
     }
-    pose.bob = Math.sin(t * 2 + a.seed) * 0.3;
+    idlePose(pose, t, a.seed);
     if (d.room === -1) {
       const wave = Math.sin(t * 1.5 + a.seed) > 0.8;
       if (wave) {
@@ -679,6 +738,7 @@ export class Actors {
       const j = Math.max(0, Math.sin(t * 3 + a.seed));
       pose.bob = j * 3;
       pose.armA = pose.armB = j * 1.4;
+      pose.elbowA = pose.elbowB = 0.2;
       pose.mouth = 'grin';
     }
     return { pose, ko: false, style };

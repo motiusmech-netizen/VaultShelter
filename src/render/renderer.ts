@@ -7,7 +7,7 @@ import { itemByUid } from '../sim/dwellers';
 import { Actors, outfitOf, type Actor } from './actors';
 import { Background, RAMP_X0 } from './background';
 import { Camera } from './camera';
-import { drawCharacter, drawCharacterLOD, DEFAULT_POSE } from './dwellerArt';
+import { drawCharacter, drawCharacterLOD, DEFAULT_POSE, setVaultLabel } from './dwellerArt';
 import { Effects, drawHeart } from './effects';
 import { box, fillRR, glow, hazard, rgba, rrect, type Ctx } from './gfx';
 import { RoomCache, paintRoomDynamic } from './roomArt';
@@ -76,6 +76,7 @@ export class Renderer {
     this.actors = new Actors(g);
     this.cache.lang = getLang();
     this.cache.vault = g.s.vault;
+    setVaultLabel(g.s.vault);
   }
 
   setGame(g: Game) {
@@ -83,6 +84,7 @@ export class Renderer {
     this.actors = new Actors(g);
     this.cache.clear();
     this.cache.vault = g.s.vault;
+    setVaultLabel(g.s.vault);
     this.robots.clear();
   }
 

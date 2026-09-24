@@ -155,7 +155,7 @@ export function Avatar({ d, big, cls }: { d: Dweller; big?: boolean; cls?: strin
     const ctx = c.getContext('2d')!;
     ctx.scale(dpr, dpr);
     const s = (big ? 2.9 : 1.75) * (d.child ? 1.25 : 1);
-    ctx.translate(w / 2, h + (big ? 34 : 20) * (d.child ? 0.4 : 1));
+    ctx.translate(w / 2, h + (big ? 37 : 23) * (d.child ? 0.4 : 1));
     ctx.scale(s, s);
     drawCharacter(
       ctx,
